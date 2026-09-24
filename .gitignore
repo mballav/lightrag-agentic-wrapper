@@ -216,3 +216,15 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# LightRAG local data (keep placeholder dirs)
+data/**
+!data/**/
+!data/**/.gitkeep
+
+# Local env files (copy from env.example/)
+env/
+
+# Optional Neo4j Bloom / Enterprise license keys
+licenses/*
+!licenses/.gitkeep
