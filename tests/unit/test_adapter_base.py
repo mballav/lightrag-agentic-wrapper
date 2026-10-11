@@ -47,6 +47,9 @@ class StubAdapter(LightRAGAdapter):
             raise self.boom[track_id]
         return self.fetch.get(track_id, [])
 
+    async def _fetch_processed_document_page(self, *, page, page_size):
+        return [], 0, {}, False
+
 
 async def test_context_manager_and_ingest_text(tmp_path):
     config = make_config()

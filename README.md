@@ -46,11 +46,15 @@ Embedded and server stores are separate on disk. Document graph/KV/vector data n
 | Document status | `LIGHTRAG_DOC_STATUS_STORAGE` | `PGDocStatusStorage` (Postgres) |
 | Vector store | `LIGHTRAG_VECTOR_STORAGE` | `MilvusVectorDBStorage` |
 | Graph store | `LIGHTRAG_GRAPH_STORAGE` | `Neo4JStorage` (Bloom enabled) |
+| Document parser | `LIGHTRAG_PARSER` | `*:docling;*:legacy` |
+| Docling service | `DOCLING_ENDPOINT` | `http://127.0.0.1:5001` (Compose: `http://docling:5001`) |
 | Wrapper API multipart staging | `WRAPPER_UPLOAD_DIR` | `./data/wrapper/uploads` → `/app/data/wrapper/uploads` |
 
 LightRAG still uses `WORKING_DIR` / `INPUT_DIR` for pipeline scratch files. Compose mounts those plus `./data/wrapper/uploads`. Storage services persist in named Docker volumes.
 
 Dev Compose waits for Postgres, Neo4j, and Milvus before starting the wrapper. Incoming `/ingest/file` bodies are written to `WRAPPER_UPLOAD_DIR` first, then ingested. Prod Compose starts the official LightRAG container against the same three backends.
+
+PDFs and other laid-out documents are parsed by Docling (`LIGHTRAG_PARSER=*:docling;*:legacy`). Compose runs `docling-serve` (CPU image) and points the LightRAG server at `http://docling:5001`. A host-side LightRAG process uses `DOCLING_ENDPOINT=http://127.0.0.1:5001` with that service's published port. Plain-text extensions that Docling does not handle stay on LightRAG's legacy extractor.
 
 Process environment variables still override file values. Optional paths: `WRAPPER_ENV_FILE`, `LIGHTRAG_ENV_FILE`.
 
@@ -91,7 +95,7 @@ curl -X POST http://127.0.0.1:8000/ingest/status -H "Content-Type: application/j
 curl -X POST http://127.0.0.1:8000/query -H "Content-Type: application/json" -d "{\"query\":\"What is LightRAG?\"}"
 ```
 
-`/query` first runs an LLM-backed mode router, then calls the adapter with the chosen mode, `only_need_context=true`, `include_references=true`, and a blank `user_prompt`. Routable modes: `local`, `global`, `hybrid`, `naive`, `mix` (fallback).
+`/query` rewrites the question, decomposes it into a DAG, and runs that plan. The response is newline-delimited JSON (`application/x-ndjson`). Each result node is one line, `{"id", "response", "references"}`, written as soon as that node finishes. The server does not sort or join those lines. Only `retrieve` nodes call LightRAG. A result retrieve answers in one call; any other retrieve returns context only. `filter`, `transform`, `aggregate`, `compare`, `assemble`, `evaluate`, and `synthesize` are one LLM step over the parent outputs. The mode router runs once per retrieve node. Routable modes: `local`, `global`, `hybrid`, `naive`, `mix` (fallback). If decomposition fails, `/query` streams one line for a context-only retrieval of the original question, with `"id": null`. A failure after streaming has started is a final `{"error": "..."}` line.
 
 ## Docker Compose
 

@@ -46,6 +46,8 @@ services:
       LIGHTRAG_SERVER_URL: http://lightrag:9621
       APP_HOST: 0.0.0.0
       APP_PORT: "8000"
+      LIGHTRAG_PARSER: "*:docling;*:legacy"
+      DOCLING_ENDPOINT: http://docling:5001
       WRAPPER_UPLOAD_DIR: /app/data/wrapper/uploads
       WORKING_DIR: /app/data/rag_storage
       INPUT_DIR: /app/data/inputs
@@ -75,12 +77,16 @@ services:
       PORT: "9621"
       WORKING_DIR: /app/data/rag_storage
       INPUT_DIR: /app/data/inputs
+      LIGHTRAG_PARSER: "*:docling;*:legacy"
+      DOCLING_ENDPOINT: http://docling:5001
     volumes:
       - ${LIGHTRAG_RAG_STORAGE:-./data/server/rag_storage}:/app/data/rag_storage
       - ${LIGHTRAG_INPUTS:-./data/server/inputs}:/app/data/inputs
     extra_hosts:
       - "host.docker.internal:host-gateway"
     depends_on:
+      docling:
+        condition: service_healthy
       postgres:
         condition: service_healthy
       neo4j:

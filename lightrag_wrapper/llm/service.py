@@ -9,7 +9,6 @@ error wrapping behave the same regardless of request type.
 
 from __future__ import annotations
 
-import logging
 from collections.abc import AsyncIterator, Awaitable, Callable, Mapping, Sequence
 from typing import Any, Literal
 
@@ -18,8 +17,9 @@ import tenacity
 
 from lightrag_wrapper.config import LightRAGConfig, get_config
 from lightrag_wrapper.exceptions import LLMServiceError
+from lightrag_wrapper.log import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 RetryStrategy = Literal["exponential_backoff_retry", "constant_retry"]
 
@@ -730,11 +730,11 @@ class LLMService:
     def _log_retry(self, retry_state: tenacity.RetryCallState) -> None:
         exc = retry_state.outcome.exception() if retry_state.outcome else None
         logger.warning(
-            "LLM call retry %s/%s after %s: %s",
-            retry_state.attempt_number,
-            max(1, self._num_retries),
-            type(exc).__name__ if exc else "unknown",
-            exc,
+            "Retrying LLM call",
+            attempt=retry_state.attempt_number,
+            max_attempts=max(1, self._num_retries),
+            error_type=type(exc).__name__ if exc else "unknown",
+            error=str(exc) if exc else None,
         )
 
 

@@ -57,6 +57,31 @@ class Router:
             else:
                 doc = self.track_docs.pop(0)
             return httpx.Response(200, json={"documents": [doc], "status_summary": {}})
+        if path == "/documents/paginated":
+            return httpx.Response(
+                200,
+                json={
+                    "documents": [
+                        {
+                            "id": "doc-1",
+                            "status": "processed",
+                            "file_path": "leave-policy.pdf",
+                            "content_summary": "Employees accrue 18 days",
+                            "content_length": 120,
+                            "chunks_count": 2,
+                            "created_at": "2026-01-01T00:00:00",
+                            "updated_at": "2026-01-02T00:00:00",
+                        }
+                    ],
+                    "pagination": {
+                        "page": 1,
+                        "page_size": 50,
+                        "total_count": 1,
+                        "has_next": False,
+                    },
+                    "status_counts": {"processed": 1, "failed": 0},
+                },
+            )
         if path == "/query":
             return httpx.Response(
                 200,
@@ -213,6 +238,17 @@ async def test_wait_timeout_and_missing_track(monkeypatch, router):
     router.fail_status = 500
     with pytest.raises(LightRAGAdapterError):
         await adapter._fetch_track_documents("gone")
+
+
+async def test_server_lists_processed_document_catalog(router):
+    adapter = ServerLightRAGAdapter(make_config(lightrag_mode="server"))
+    await adapter.initialize()
+    catalog = await adapter.list_document_catalog()
+    assert catalog["catalog_complete"] is True
+    assert catalog["processed_document_count"] == 1
+    assert catalog["documents"][0]["file_path"] == "leave-policy.pdf"
+    assert catalog["documents"][0]["preview"] == "Employees accrue 18 days"
+    assert ("POST", "/documents/paginated") in router.calls
 
 
 def test_response_detail_branches():

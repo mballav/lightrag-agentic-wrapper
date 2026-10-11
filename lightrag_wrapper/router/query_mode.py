@@ -3,15 +3,15 @@
 from __future__ import annotations
 
 import json
-import logging
 import re
 from typing import Any
 
 from lightrag_wrapper.exceptions import LLMServiceError
+from lightrag_wrapper.log import get_logger
 from lightrag_wrapper.llm.service import LLMService
 from lightrag_wrapper.models import QueryMode
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 # Modes the router may choose. ``bypass`` is intentionally excluded.
 _ROUTABLE_MODES = frozenset(
@@ -72,22 +72,26 @@ class QueryModeRouter:
             )
         except LLMServiceError as exc:
             logger.warning(
-                "Query mode routing LLM call failed (%s); defaulting to %s",
-                exc,
-                self._default_mode.value,
+                "Query mode routing LLM call failed; using the default mode",
+                error=str(exc),
+                default_mode=self._default_mode.value,
             )
             return self._default_mode
 
         mode = self._parse_mode(raw if isinstance(raw, str) else str(raw))
         if mode is None:
             logger.warning(
-                "Query mode router returned unusable payload %r; defaulting to %s",
-                raw,
-                self._default_mode.value,
+                "Query mode router returned an unusable payload; using the default mode",
+                payload=raw,
+                default_mode=self._default_mode.value,
             )
             return self._default_mode
 
-        logger.info("Query mode router selected %s for %r", mode.value, cleaned[:120])
+        logger.info(
+            "Query mode router selected a mode",
+            mode=mode.value,
+            query=cleaned[:120],
+        )
         return mode
 
     def _parse_mode(self, raw: str) -> QueryMode | None:

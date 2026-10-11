@@ -1,5 +1,7 @@
 """Query path through the HTTP API with the real rewriter and mode router."""
 
+import json
+
 from fastapi.testclient import TestClient
 
 from lightrag_wrapper.models import IngestResult, QueryResult
@@ -7,6 +9,8 @@ from tests.conftest import make_config
 
 
 class ScriptedLLM:
+    last_decomposer_prompt = None
+
     def __init__(self, config):
         self.config = config
 
@@ -14,6 +18,13 @@ class ScriptedLLM:
         system = kwargs.get("system_prompt") or ""
         if "retrieval-mode router" in system:
             return '{"mode": "hybrid", "reason": "entities relate"}'
+        if "Query Decomposer" in system:
+            ScriptedLLM.last_decomposer_prompt = prompt
+            return (
+                '[{"Id": 1, "nodeType": "retrieve",'
+                ' "subquery": "Retrieve the Berlin annual leave accrual",'
+                ' "depends_on": [], "isResultNode": true}]'
+            )
         return (
             '{"rewritten_query": "Annual leave accrual for the Berlin office",'
             ' "high_level_keywords": ["employee leave policy"],'
@@ -41,6 +52,22 @@ class QueryAdapter:
             track_ids=["q-track"],
             sources=list(sources or ["notes.txt"]),
         )
+
+    async def list_document_catalog(self):
+        return {
+            "catalog_complete": True,
+            "processed_document_count": 1,
+            "listed_document_count": 1,
+            "listing_policy": "All processed documents are listed.",
+            "status_counts": {"processed": 1},
+            "documents": [
+                {
+                    "id": "doc-leave",
+                    "file_path": "leave-policy.pdf",
+                    "preview": "Full-time employees accrue 18 days",
+                }
+            ],
+        }
 
     async def query(self, query, **kwargs):
         self.last = (query, kwargs)
@@ -87,11 +114,13 @@ def test_query_uses_rewriter_and_router(monkeypatch, tmp_path):
             },
         )
         assert response.status_code == 200
-        body = response.json()
-        assert body["mode"] == "hybrid"
-        assert "18 days" in body["response"]
+        assert response.headers["content-type"].startswith("application/x-ndjson")
+        line = json.loads(response.text)
+        assert line["id"] == 1
+        assert "18 days" in line["response"]
         rewritten, kwargs = holder["adapter"].last
         assert "Berlin" in rewritten
         assert kwargs["high_level_keywords"] == ["employee leave policy"]
-        assert kwargs["only_need_context"] is True
+        assert kwargs["only_need_context"] is False
         assert kwargs["include_references"] is True
+        assert "leave-policy.pdf" in ScriptedLLM.last_decomposer_prompt

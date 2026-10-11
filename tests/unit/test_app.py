@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -9,10 +11,12 @@ from lightrag_wrapper.exceptions import LightRAGAdapterError
 from lightrag_wrapper.models import (
     IngestResult,
     QueryMode,
+    QueryPlanNode,
     QueryResult,
     TrackIngestStatus,
     TrackStatusBatchResult,
 )
+from lightrag_wrapper.query_decomposer.query_decomposer import Decomposition
 from lightrag_wrapper.query_rewriter.query_rewriter import RewrittenQuery
 from tests.conftest import make_config
 
@@ -22,6 +26,7 @@ class APIAdapter:
         self.config = config
         self.closed = False
         self.fail = None
+        self.last = None
 
     async def initialize(self):
         return None
@@ -74,6 +79,7 @@ class APIAdapter:
         )
 
     async def query(self, query, **kwargs):
+        self.last = (query, kwargs)
         if self.fail == "adapter":
             raise LightRAGAdapterError("query down", status_code=500)
         return QueryResult(response=f"ctx:{query}", mode=kwargs["mode"], references=[])
@@ -88,6 +94,29 @@ class APIRewriter:
             rewritten_query=query.strip(),
             high_level_keywords=["leave"],
             low_level_keywords=["Berlin"],
+        )
+
+
+class APIDecomposer:
+    def __init__(self, llm, adapter):
+        self.llm = llm
+        self.adapter = adapter
+        self.return_plan = True
+
+    async def decompose(self, query, conversation_history=None):
+        if not self.return_plan:
+            return None
+        return Decomposition(
+            nodes=[
+                QueryPlanNode(
+                    Id=1,
+                    nodeType="retrieve",
+                    subquery=query.strip(),
+                    depends_on=[],
+                    isResultNode=True,
+                )
+            ],
+            knowledge_base_metadata="{}",
         )
 
 
@@ -118,6 +147,7 @@ def api_app(monkeypatch, tmp_path):
     monkeypatch.setattr(app_module, "LLMService", lambda config: object())
     monkeypatch.setattr(app_module, "QueryRewriter", APIRewriter)
     monkeypatch.setattr(app_module, "QueryModeRouter", APIRouter)
+    monkeypatch.setattr(app_module, "QueryDecomposer", APIDecomposer)
 
     with TestClient(app_module.app) as client:
         yield client, holder
@@ -213,14 +243,70 @@ def test_query_pipeline(api_app):
         },
     )
     assert response.status_code == 200
-    body = response.json()
-    assert body["mode"] == "local"
-    assert "leave days" in body["response"]
+    assert response.headers["content-type"].startswith("application/x-ndjson")
+    line = json.loads(response.text)
+    assert line["id"] == 1
+    assert "leave days" in line["response"]
 
     holder["adapter"].fail = "adapter"
-    assert client.post("/query", json={"query": "x"}).status_code == 500
+    failed = client.post("/query", json={"query": "x"})
+    assert failed.status_code == 200
+    assert json.loads(failed.text) == {"error": "query down"}
 
     assert client.post("/query", json={"query": ""}).status_code == 422
+
+
+async def test_a_failure_after_a_result_line_ends_the_stream_with_an_error():
+    from lightrag_wrapper.app import _plan_lines
+    from lightrag_wrapper.exceptions import LightRAGAdapterError
+
+    class _Executor:
+        async def stream(self, nodes, **kwargs):
+            yield {"id": 1, "response": "first", "references": []}
+            raise LightRAGAdapterError("query down", status_code=500)
+
+    lines = [
+        json.loads(line)
+        async for line in _plan_lines(
+            _Executor(),
+            [],
+            user_query="question",
+            conversation_history=None,
+            high_level_keywords=None,
+            low_level_keywords=None,
+        )
+    ]
+    assert lines == [
+        {"id": 1, "response": "first", "references": []},
+        {"error": "query down"},
+    ]
+
+
+def test_query_without_a_plan_retrieves_context_only(api_app):
+    import lightrag_wrapper.app as app_module
+
+    client, holder = api_app
+    app_module.get_query_decomposer().return_plan = False
+    response = client.post("/query", json={"query": "How many leave days?"})
+    assert response.status_code == 200
+    line = json.loads(response.text)
+    assert line["id"] is None
+    assert "How many leave days?" in line["response"]
+    query, kwargs = holder["adapter"].last
+    assert query == "How many leave days?"
+    assert kwargs["only_need_context"] is True
+    assert kwargs["high_level_keywords"] == ["leave"]
+    assert kwargs["low_level_keywords"] == ["Berlin"]
+
+
+def test_query_without_a_plan_still_returns_an_http_error(api_app):
+    import lightrag_wrapper.app as app_module
+
+    client, holder = api_app
+    app_module.get_query_decomposer().return_plan = False
+    holder["adapter"].fail = "adapter"
+    response = client.post("/query", json={"query": "How many leave days?"})
+    assert response.status_code == 500
 
 
 def test_dependency_accessors_after_startup(api_app):
@@ -230,4 +316,6 @@ def test_dependency_accessors_after_startup(api_app):
     assert app_module.get_settings().lightrag_mode == "embedded"
     assert app_module.get_query_rewriter() is not None
     assert app_module.get_query_router() is not None
+    assert app_module.get_query_decomposer() is not None
+    assert app_module.get_query_executor() is not None
     assert api_app[1]["adapter"].closed is False

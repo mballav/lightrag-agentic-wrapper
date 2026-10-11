@@ -3,16 +3,16 @@
 from __future__ import annotations
 
 import json
-import logging
 import re
 from dataclasses import dataclass, field
 from typing import Any
 
 from lightrag_wrapper.exceptions import LLMServiceError
+from lightrag_wrapper.log import get_logger
 from lightrag_wrapper.llm.service import LLMService
 from lightrag_wrapper.query_rewriter.rewrite_prompt import SYSTEM_PROMPT
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 # LightRAG /query rejects longer lists and longer individual keywords.
 _MAX_KEYWORDS = 64
@@ -57,24 +57,24 @@ class QueryRewriter:
             )
         except LLMServiceError as exc:
             logger.warning(
-                "Query rewriter LLM call failed (%s); using the original query",
-                exc,
+                "Query rewriter LLM call failed; using the original query",
+                error=str(exc),
             )
             return _fallback(cleaned)
 
         parsed = _parse_rewrite(raw if isinstance(raw, str) else str(raw), cleaned)
         if parsed is None:
             logger.warning(
-                "Query rewriter returned unusable payload %r; using the original query",
-                raw,
+                "Query rewriter returned an unusable payload; using the original query",
+                payload=raw,
             )
             return _fallback(cleaned)
 
         logger.info(
-            "Query rewriter produced %r (hl=%s ll=%s)",
-            parsed.rewritten_query[:120],
-            parsed.high_level_keywords,
-            parsed.low_level_keywords,
+            "Query rewriter produced a retrieval query",
+            rewritten_query=parsed.rewritten_query[:120],
+            high_level_keywords=parsed.high_level_keywords,
+            low_level_keywords=parsed.low_level_keywords,
         )
         return parsed
 

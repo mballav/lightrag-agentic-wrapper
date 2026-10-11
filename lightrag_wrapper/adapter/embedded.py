@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import logging
+import inspect
 import os
 from collections.abc import Sequence
 from pathlib import Path
@@ -11,11 +11,13 @@ from typing import Any
 import aiofiles
 import aiofiles.os
 
+from lightrag_wrapper.adapter._catalog import coerce_status_counts
 from lightrag_wrapper.adapter._sources import normalize_sources
 from lightrag_wrapper.adapter._status import document_status_from_sdk
 from lightrag_wrapper.adapter.base import LightRAGAdapter
 from lightrag_wrapper.config import LightRAGConfig
 from lightrag_wrapper.exceptions import LightRAGAdapterError
+from lightrag_wrapper.log import get_logger
 from lightrag_wrapper.llm import LLMService
 from lightrag_wrapper.models import (
     DocumentIngestStatus,
@@ -25,7 +27,7 @@ from lightrag_wrapper.models import (
     Reference,
 )
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class EmbeddedLightRAGAdapter(LightRAGAdapter):
@@ -88,10 +90,10 @@ class EmbeddedLightRAGAdapter(LightRAGAdapter):
         await rag.initialize_storages()
         self._rag = rag
         logger.info(
-            "Embedded LightRAG initialized (working_dir=%s, llm=%s, embedding=%s)",
-            self.config.working_dir,
-            self.config.llm_model,
-            self.config.embedding_model,
+            "Embedded LightRAG initialized",
+            working_dir=self.config.working_dir,
+            llm=self.config.llm_model,
+            embedding=self.config.embedding_model,
         )
 
     async def aclose(self) -> None:
@@ -250,6 +252,69 @@ class EmbeddedLightRAGAdapter(LightRAGAdapter):
             document_status_from_sdk(str(doc_id), status)
             for doc_id, status in docs_by_id.items()
         ]
+
+    async def _fetch_processed_document_page(
+        self,
+        *,
+        page: int,
+        page_size: int,
+    ) -> tuple[list[DocumentIngestStatus], int, dict[str, int], bool]:
+        rag = self._require_rag()
+        doc_status = getattr(rag, "doc_status", None)
+        if doc_status is None or not hasattr(doc_status, "get_docs_paginated"):
+            raise LightRAGAdapterError(
+                "This LightRAG SDK build does not support document listing."
+            )
+        try:
+            from lightrag.base import DocStatus
+        except ImportError as exc:
+            raise LightRAGAdapterError(
+                "lightrag-hku is required for embedded mode."
+            ) from exc
+
+        method = doc_status.get_docs_paginated
+        parameters = inspect.signature(method).parameters
+        call: dict[str, Any] = {
+            "page": page,
+            "page_size": page_size,
+            "sort_field": "updated_at",
+            "sort_direction": "desc",
+        }
+        if "status_filters" in parameters:
+            call["status_filters"] = [DocStatus.PROCESSED]
+        elif "status_filter" in parameters:
+            call["status_filter"] = DocStatus.PROCESSED
+
+        try:
+            rows, total = await method(**call)
+        except Exception as exc:
+            raise LightRAGAdapterError(
+                f"Embedded document listing failed: {exc}"
+            ) from exc
+
+        documents = [
+            document_status_from_sdk(str(doc_id), status)
+            for doc_id, status in rows
+        ]
+        documents = [doc for doc in documents if doc.status == "processed"]
+        counts = await _status_counts(doc_status)
+        processed_total = int(total)
+        has_next = page * page_size < processed_total
+        return documents, processed_total, counts, has_next
+
+
+async def _status_counts(doc_status: Any) -> dict[str, int]:
+    counter = getattr(doc_status, "get_all_status_counts", None) or getattr(
+        doc_status, "get_status_counts", None
+    )
+    if counter is None:
+        return {}
+    try:
+        raw = await counter()
+    except Exception:
+        logger.warning("Embedded document status counts failed", exc_info=True)
+        return {}
+    return coerce_status_counts(raw)
 
 
 def _export_storage_env(config: LightRAGConfig) -> None:

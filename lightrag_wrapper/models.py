@@ -5,7 +5,7 @@ from __future__ import annotations
 from enum import Enum
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field
 
 
 class QueryMode(str, Enum):
@@ -67,9 +67,29 @@ class TrackStatusBatchResult(BaseModel):
     tracks: list[TrackIngestStatus]
 
 
+class QueryPlanNode(BaseModel):
+    """One node in the decomposer's retrieval DAG."""
+
+    model_config = ConfigDict(populate_by_name=True)
+
+    id: int = Field(validation_alias=AliasChoices("Id", "id"), serialization_alias="Id")
+    node_type: str = Field(
+        validation_alias=AliasChoices("nodeType", "node_type"),
+        serialization_alias="nodeType",
+    )
+    subquery: str
+    depends_on: list[int] = Field(default_factory=list)
+    is_result_node: bool = Field(
+        default=False,
+        validation_alias=AliasChoices("isResultNode", "is_result_node"),
+        serialization_alias="isResultNode",
+    )
+
+
 class QueryResult(BaseModel):
     response: str
     mode: QueryMode
     references: list[Reference] | None = None
     response_time: float | None = None
+    plan: list[QueryPlanNode] | None = None
     raw: Any = Field(default=None, exclude=True)

@@ -3,14 +3,19 @@
 from __future__ import annotations
 
 import asyncio
-import logging
 from abc import ABC, abstractmethod
 from collections.abc import Sequence
 from pathlib import Path
 from types import TracebackType
+from typing import Any
 
 import aiofiles.ospath
 
+from lightrag_wrapper.adapter._catalog import (
+    CATALOG_MAX_DOCUMENTS,
+    CATALOG_PAGE_SIZE,
+    build_document_catalog,
+)
 from lightrag_wrapper.adapter._status import (
     TRACK_STATUS_CONCURRENCY,
     build_track_status,
@@ -18,6 +23,7 @@ from lightrag_wrapper.adapter._status import (
 )
 from lightrag_wrapper.config import LightRAGConfig
 from lightrag_wrapper.exceptions import LightRAGAdapterError
+from lightrag_wrapper.log import get_logger
 from lightrag_wrapper.models import (
     DocumentIngestStatus,
     IngestResult,
@@ -27,7 +33,7 @@ from lightrag_wrapper.models import (
     TrackStatusBatchResult,
 )
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class LightRAGAdapter(ABC):
@@ -114,7 +120,11 @@ class LightRAGAdapter(ABC):
             try:
                 documents = await self._fetch_track_documents(track_id)
             except LightRAGAdapterError as exc:
-                logger.warning("Track status failed for %s: %s", track_id, exc)
+                logger.warning(
+                    "Track status failed",
+                    track_id=track_id,
+                    error=str(exc),
+                )
                 return TrackIngestStatus(
                     track_id=track_id,
                     found=False,
@@ -123,7 +133,10 @@ class LightRAGAdapter(ABC):
                     error=str(exc),
                 )
             except Exception as exc:
-                logger.exception("Unexpected track status error for %s", track_id)
+                logger.exception(
+                    "Unexpected track status error",
+                    track_id=track_id,
+                )
                 return TrackIngestStatus(
                     track_id=track_id,
                     found=False,
@@ -139,6 +152,52 @@ class LightRAGAdapter(ABC):
         track_id: str,
     ) -> list[DocumentIngestStatus]:
         """Load documents associated with one LightRAG track_id."""
+
+    async def list_document_catalog(self) -> dict[str, Any]:
+        """Return processed-document metadata for the query decomposer.
+
+        Lists at most ``CATALOG_MAX_DOCUMENTS`` rows, newest update first.
+        ``content_summary`` is exposed as ``preview`` because LightRAG stores
+        the first characters of the file, not an abstract.
+        """
+        collected: list[DocumentIngestStatus] = []
+        total = 0
+        status_counts: dict[str, int] = {}
+        page = 1
+        while len(collected) < CATALOG_MAX_DOCUMENTS:
+            documents, page_total, counts, has_next = (
+                await self._fetch_processed_document_page(
+                    page=page,
+                    page_size=CATALOG_PAGE_SIZE,
+                )
+            )
+            total = page_total
+            if counts:
+                status_counts = counts
+            if not documents:
+                break
+            room = CATALOG_MAX_DOCUMENTS - len(collected)
+            collected.extend(documents[:room])
+            if len(collected) >= CATALOG_MAX_DOCUMENTS or not has_next:
+                break
+            page += 1
+        return build_document_catalog(
+            collected,
+            processed_total=total,
+            status_counts=status_counts,
+        )
+
+    @abstractmethod
+    async def _fetch_processed_document_page(
+        self,
+        *,
+        page: int,
+        page_size: int,
+    ) -> tuple[list[DocumentIngestStatus], int, dict[str, int], bool]:
+        """Load one page of processed documents.
+
+        Returns ``(documents, processed_total, status_counts, has_next)``.
+        """
 
     async def ingest_text(
         self,

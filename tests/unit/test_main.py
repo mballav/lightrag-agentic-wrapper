@@ -23,3 +23,4 @@ def test_main_runs_uvicorn(monkeypatch):
     assert called["kwargs"]["host"] == "127.0.0.1"
     assert called["kwargs"]["port"] == 8123
     assert called["kwargs"]["log_level"] == "debug"
+    assert called["kwargs"]["log_config"]["root"]["handlers"] == ["structured"]

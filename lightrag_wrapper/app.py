@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-import logging
+import json
+from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any
@@ -10,6 +11,7 @@ from typing import Any
 import aiofiles
 import aiofiles.os
 from fastapi import Depends, FastAPI, File, HTTPException, Query, UploadFile
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
 from lightrag_wrapper.adapter import LightRAGAdapter, create_adapter
@@ -17,16 +19,20 @@ from lightrag_wrapper.adapter._sources import unique_destination
 from lightrag_wrapper.adapter._status import MAX_TRACK_IDS
 from lightrag_wrapper.config import LightRAGConfig, get_config
 from lightrag_wrapper.exceptions import LightRAGAdapterError
+from lightrag_wrapper.log import configure_logging, get_logger
 from lightrag_wrapper.llm import LLMService
 from lightrag_wrapper.models import (
     IngestResult,
+    QueryPlanNode,
     QueryResult,
     TrackStatusBatchResult,
 )
+from lightrag_wrapper.query_decomposer import QueryDecomposer
+from lightrag_wrapper.query_executor import PlanExecutor
 from lightrag_wrapper.query_rewriter import QueryRewriter
 from lightrag_wrapper.router import QueryModeRouter
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class IngestTextRequest(BaseModel):
@@ -53,18 +59,17 @@ class TrackStatusRequest(BaseModel):
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     config = await get_config()
-    logging.basicConfig(
-        level=config.log_level.upper(),
-        format="%(asctime)s %(levelname)s %(name)s: %(message)s",
-    )
+    configure_logging(config.log_level)
     adapter = create_adapter(config)
     llm = LLMService(config)
     rewriter = QueryRewriter(llm)
     router = QueryModeRouter(llm)
+    decomposer = QueryDecomposer(llm, adapter)
+    executor = PlanExecutor(llm, adapter, router)
     logger.info(
-        "Starting LightRAG adapter in %s mode (APP_ENV=%s)",
-        config.lightrag_mode,
-        config.app_env,
+        "Starting LightRAG adapter",
+        mode=config.lightrag_mode,
+        app_env=config.app_env,
     )
     await adapter.initialize()
     app.state.adapter = adapter
@@ -72,6 +77,8 @@ async def lifespan(app: FastAPI):
     app.state.llm = llm
     app.state.query_rewriter = rewriter
     app.state.query_router = router
+    app.state.query_decomposer = decomposer
+    app.state.query_executor = executor
     try:
         yield
     finally:
@@ -99,6 +106,14 @@ def get_query_rewriter() -> QueryRewriter:
 
 def get_query_router() -> QueryModeRouter:
     return app.state.query_router
+
+
+def get_query_decomposer() -> QueryDecomposer:
+    return app.state.query_decomposer
+
+
+def get_query_executor() -> PlanExecutor:
+    return app.state.query_executor
 
 
 @app.get("/health")
@@ -194,25 +209,81 @@ async def ingest_status(
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
-@app.post("/query", response_model=QueryResult)
+def _ndjson(payload: dict) -> str:
+    return json.dumps(payload, ensure_ascii=False) + "\n"
+
+
+async def _fallback_line(result: QueryResult) -> AsyncIterator[str]:
+    yield _ndjson(
+        {
+            "id": None,
+            "response": result.response,
+            "references": [ref.model_dump() for ref in (result.references or [])],
+        }
+    )
+
+
+async def _plan_lines(
+    executor: PlanExecutor,
+    nodes: list[QueryPlanNode],
+    *,
+    user_query: str,
+    conversation_history: list[dict[str, str]] | None,
+    high_level_keywords: list[str] | None,
+    low_level_keywords: list[str] | None,
+) -> AsyncIterator[str]:
+    try:
+        async for event in executor.stream(
+            nodes,
+            user_query=user_query,
+            conversation_history=conversation_history,
+            high_level_keywords=high_level_keywords,
+            low_level_keywords=low_level_keywords,
+        ):
+            yield _ndjson(event)
+    except LightRAGAdapterError as exc:
+        yield _ndjson({"error": str(exc)})
+
+
+@app.post("/query")
 async def query(
     body: QueryRequest,
     adapter: LightRAGAdapter = Depends(get_adapter),
     rewriter: QueryRewriter = Depends(get_query_rewriter),
     router: QueryModeRouter = Depends(get_query_router),
-) -> QueryResult:
+    decomposer: QueryDecomposer = Depends(get_query_decomposer),
+    executor: PlanExecutor = Depends(get_query_executor),
+) -> StreamingResponse:
     try:
         rewritten = await rewriter.rewrite(body.query, body.conversation_history)
-        mode = await router.route(rewritten.rewritten_query)
-        return await adapter.query(
-            rewritten.rewritten_query,
-            mode=mode,
-            only_need_context=True,
-            user_prompt=None,
-            conversation_history=body.conversation_history,
-            include_references=True,
-            high_level_keywords=rewritten.high_level_keywords,
-            low_level_keywords=rewritten.low_level_keywords,
-        )
+        plan = await decomposer.decompose(rewritten.rewritten_query, body.conversation_history)
+        if plan is None:
+            mode = await router.route(body.query)
+            fallback = await adapter.query(
+                body.query,
+                mode=mode,
+                only_need_context=True,
+                user_prompt=None,
+                conversation_history=body.conversation_history,
+                include_references=True,
+                high_level_keywords=rewritten.high_level_keywords,
+                low_level_keywords=rewritten.low_level_keywords,
+            )
+            return StreamingResponse(
+                _fallback_line(fallback),
+                media_type="application/x-ndjson",
+            )
     except LightRAGAdapterError as exc:
         raise HTTPException(status_code=exc.status_code or 502, detail=str(exc)) from exc
+
+    return StreamingResponse(
+        _plan_lines(
+            executor,
+            plan.nodes,
+            user_query=rewritten.rewritten_query,
+            conversation_history=body.conversation_history,
+            high_level_keywords=rewritten.high_level_keywords,
+            low_level_keywords=rewritten.low_level_keywords,
+        ),
+        media_type="application/x-ndjson",
+    )

@@ -48,6 +48,8 @@ services:
       LIGHTRAG_SERVER_URL: http://lightrag-server:9621
       APP_HOST: 0.0.0.0
       APP_PORT: "8000"
+      LIGHTRAG_PARSER: "*:docling;*:legacy"
+      DOCLING_ENDPOINT: http://docling:5001
       WORKING_DIR: /app/data/rag_storage
       INPUT_DIR: /app/data/inputs
       WRAPPER_UPLOAD_DIR: /app/data/wrapper/uploads
@@ -78,12 +80,16 @@ services:
       PORT: "9621"
       WORKING_DIR: /app/data/rag_storage
       INPUT_DIR: /app/data/inputs
+      LIGHTRAG_PARSER: "*:docling;*:legacy"
+      DOCLING_ENDPOINT: http://docling:5001
     volumes:
       - ${LIGHTRAG_RAG_STORAGE:-./data/server/rag_storage}:/app/data/rag_storage
       - ${LIGHTRAG_INPUTS:-./data/server/inputs}:/app/data/inputs
     extra_hosts:
       - "host.docker.internal:host-gateway"
     depends_on:
+      docling:
+        condition: service_healthy
       postgres:
         condition: service_healthy
       neo4j:
@@ -100,6 +106,27 @@ services:
       timeout: 5s
       retries: 12
       start_period: 60s
+    restart: unless-stopped
+
+  docling:
+    image: quay.io/docling-project/docling-serve-cpu:latest
+    ports:
+      - "127.0.0.1:${DOCLING_PORT:-5001}:5001"
+    environment:
+      DOCLING_SERVE_ENABLE_UI: "false"
+      DOCLING_SERVE_ARTIFACTS_PATH: /opt/app-root/src/models
+    volumes:
+      - docling_models:/opt/app-root/src/models
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:5001/health')\"",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 40
+      start_period: 180s
     restart: unless-stopped
 
   postgres:
@@ -215,6 +242,7 @@ services:
     restart: unless-stopped
 
 volumes:
+  docling_models:
   postgres_data:
   neo4j_data:
   neo4j_plugins:

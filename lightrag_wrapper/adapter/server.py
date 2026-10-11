@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-import logging
 from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
@@ -13,6 +12,7 @@ import aiofiles
 import aiofiles.ospath
 import httpx
 
+from lightrag_wrapper.adapter._catalog import coerce_status_counts
 from lightrag_wrapper.adapter._sources import merge_ingest_results, normalize_sources
 from lightrag_wrapper.adapter._status import (
     build_track_status,
@@ -22,6 +22,7 @@ from lightrag_wrapper.adapter._status import (
 from lightrag_wrapper.adapter.base import LightRAGAdapter
 from lightrag_wrapper.config import LightRAGConfig
 from lightrag_wrapper.exceptions import LightRAGAdapterError
+from lightrag_wrapper.log import get_logger
 from lightrag_wrapper.models import (
     DocumentIngestStatus,
     IngestResult,
@@ -30,7 +31,7 @@ from lightrag_wrapper.models import (
     Reference,
 )
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class ServerLightRAGAdapter(LightRAGAdapter):
@@ -55,8 +56,8 @@ class ServerLightRAGAdapter(LightRAGAdapter):
             timeout=timeout,
         )
         logger.info(
-            "LightRAG server adapter ready (url=%s)",
-            self.config.lightrag_server_url,
+            "LightRAG server adapter ready",
+            url=self.config.lightrag_server_url,
         )
 
     async def aclose(self) -> None:
@@ -299,6 +300,35 @@ class ServerLightRAGAdapter(LightRAGAdapter):
             document_status_from_payload(item)
             for item in coerce_document_payloads(data.get("documents"))
         ]
+
+    async def _fetch_processed_document_page(
+        self,
+        *,
+        page: int,
+        page_size: int,
+    ) -> tuple[list[DocumentIngestStatus], int, dict[str, int], bool]:
+        data = await self._request(
+            "POST",
+            "/documents/paginated",
+            json={
+                "status_filter": "processed",
+                "page": page,
+                "page_size": page_size,
+                "sort_field": "updated_at",
+                "sort_direction": "desc",
+            },
+        )
+        documents = [
+            document_status_from_payload(item)
+            for item in coerce_document_payloads(data.get("documents"))
+        ]
+        documents = [doc for doc in documents if doc.status == "processed"]
+        pagination = data.get("pagination") if isinstance(data.get("pagination"), dict) else {}
+        total = int(pagination.get("total_count") or 0)
+        has_next = bool(pagination.get("has_next"))
+        if "has_next" not in pagination:
+            has_next = page * page_size < total
+        return documents, total, coerce_status_counts(data.get("status_counts")), has_next
 
 
 def _response_detail(response: httpx.Response) -> str:
