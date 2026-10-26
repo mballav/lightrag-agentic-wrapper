@@ -142,7 +142,52 @@ def parse_decomposition(raw: str) -> list[QueryPlanNode] | None:
         return None
     if not _dependencies_are_valid(nodes) or not _plan_structure_is_valid(nodes):
         return None
-    return nodes
+    return _renumber_depth_first(nodes)
+
+
+def _renumber_depth_first(nodes: list[QueryPlanNode]) -> list[QueryPlanNode]:
+    """Assign ids 1..n in a depth-first walk from the roots.
+
+    Roots and siblings keep their original id order. A node is numbered only
+    after everything it depends on, so one branch is followed as far as those
+    dependencies allow before the next branch starts.
+    """
+    children: dict[int, list[QueryPlanNode]] = {node.id: [] for node in nodes}
+    for node in nodes:
+        for dependency in dict.fromkeys(node.depends_on):
+            children[dependency].append(node)
+    for kids in children.values():
+        kids.sort(key=lambda node: node.id)
+    roots = sorted((node for node in nodes if not node.depends_on), key=lambda node: node.id)
+
+    assigned: dict[int, int] = {}
+    next_id = 1
+
+    def visit(node: QueryPlanNode) -> None:
+        nonlocal next_id
+        if node.id in assigned:
+            return
+        if any(dependency not in assigned for dependency in node.depends_on):
+            return
+        assigned[node.id] = next_id
+        next_id += 1
+        for child in children[node.id]:
+            visit(child)
+
+    for root in roots:
+        visit(root)
+
+    renumbered = [
+        node.model_copy(
+            update={
+                "id": assigned[node.id],
+                "depends_on": [assigned[dependency] for dependency in node.depends_on],
+            }
+        )
+        for node in nodes
+    ]
+    renumbered.sort(key=lambda node: node.id)
+    return renumbered
 
 
 def _plan_structure_is_valid(nodes: list[QueryPlanNode]) -> bool:

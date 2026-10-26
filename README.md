@@ -7,20 +7,30 @@ Agentic wrapper around [LightRAG](https://github.com/HKUDS/LightRAG). This first
 - `lightrag_wrapper/config.py` — `LightRAGConfig`, loaded from split env files
 - `lightrag_wrapper/adapter/` — `create_adapter()`, embedded SDK backend, HTTP server backend
 - `lightrag_wrapper/app.py` — FastAPI surface (`/ingest`, `/ingest/file`, `/ingest/status`, `/query`)
-- `docker-compose.yaml` — wrapper app in **embedded** LightRAG mode (dev)
-- `docker-compose.prod.yaml` — wrapper + standalone LightRAG server
+- `docker-compose.yaml` — wrapper app in **embedded** LightRAG mode (dev), plus Postgres, Milvus, and Neo4j
+- `docker-compose.prod.yaml` — production stack: wrapper plus standalone LightRAG server
 - `env.example/` — committed templates; copy to `env/` (gitignored)
 
 ## Configuration
 
-Env is split by concern and by environment:
+Each setting lives in one file. `APP_ENV=dev` (default) or `APP_ENV=prod` selects the set. `LightRAGConfig.from_env()` loads these three, and later files win:
+
+| File | What it owns |
+|---|---|
+| `env/stack/dev/` or `env/stack/prod/` | One credential file per data service. The wrapper and LightRAG server load `postgres.env`, `neo4j.env`, and `milvus.env`. `minio.env` is only for the Milvus and MinIO containers. |
+| `env/lightrag-config/.env.{APP_ENV}` | LLM, embedding, storage backends, host endpoints (`localhost`), parser, indexing, LightRAG server |
+| `env/wrapper/.env.{APP_ENV}` | Adapter mode, wrapper HTTP, ingest/query defaults, host filesystem paths |
+
+Compose does not copy those values. On `app` and the prod `lightrag` service, `environment` only replaces hostnames and paths that differ inside the Docker network (`postgres`, `neo4j://neo4j:7687`, `http://milvus:19530`, `http://docling:5001`, `/app/data/...`). `${APP_PORT}` and the other `${...}` substitutions in the compose files are published host ports. They read a project `.env` or the shell, not these files.
 
 ```
 env.example/
-  wrapper/.env.dev
-  wrapper/.env.prod
+  stack/dev/    postgres.env  neo4j.env  milvus.env  minio.env
+  stack/prod/   postgres.env  neo4j.env  milvus.env  minio.env
   lightrag-config/.env.dev
   lightrag-config/.env.prod
+  wrapper/.env.dev
+  wrapper/.env.prod
 ```
 
 Copy the templates into the gitignored `env/` tree, then fill in secrets:
@@ -32,11 +42,6 @@ xcopy /E /I env.example env
 # macOS / Linux
 cp -R env.example env
 ```
-
-`APP_ENV=dev` (default) or `APP_ENV=prod` selects which pair `LightRAGConfig.from_env()` loads:
-
-1. `env/lightrag-config/.env.{APP_ENV}` — LLM, embedding, storage, LightRAG server
-2. `env/wrapper/.env.{APP_ENV}` — adapter mode, wrapper HTTP, ingest/query defaults
 
 Embedded and server stores are separate on disk. Document graph/KV/vector data now lives in Dockerized **Postgres**, **Milvus**, and **Neo4j**. The wrapper still has its own upload staging directory (`WRAPPER_UPLOAD_DIR`), which is not LightRAG's `INPUT_DIR`.
 
@@ -52,11 +57,11 @@ Embedded and server stores are separate on disk. Document graph/KV/vector data n
 
 LightRAG still uses `WORKING_DIR` / `INPUT_DIR` for pipeline scratch files. Compose mounts those plus `./data/wrapper/uploads`. Storage services persist in named Docker volumes.
 
-Dev Compose waits for Postgres, Neo4j, and Milvus before starting the wrapper. Incoming `/ingest/file` bodies are written to `WRAPPER_UPLOAD_DIR` first, then ingested. Prod Compose starts the official LightRAG container against the same three backends.
+Dev Compose waits for Docling, Postgres, Neo4j, and Milvus before starting the wrapper. Incoming `/ingest/file` bodies are written to `WRAPPER_UPLOAD_DIR` first, then ingested. Prod Compose starts the official LightRAG container against the same backends and points the wrapper at it.
 
 PDFs and other laid-out documents are parsed by Docling (`LIGHTRAG_PARSER=*:docling;*:legacy`). Compose runs `docling-serve` (CPU image) and points the LightRAG server at `http://docling:5001`. A host-side LightRAG process uses `DOCLING_ENDPOINT=http://127.0.0.1:5001` with that service's published port. Plain-text extensions that Docling does not handle stay on LightRAG's legacy extractor.
 
-Process environment variables still override file values. Optional paths: `WRAPPER_ENV_FILE`, `LIGHTRAG_ENV_FILE`.
+Process environment variables still override file values. Optional paths: `STACK_ENV_FILE`, `LIGHTRAG_ENV_FILE`, `WRAPPER_ENV_FILE`.
 
 Switching backends (wrapper file):
 
@@ -95,21 +100,21 @@ curl -X POST http://127.0.0.1:8000/ingest/status -H "Content-Type: application/j
 curl -X POST http://127.0.0.1:8000/query -H "Content-Type: application/json" -d "{\"query\":\"What is LightRAG?\"}"
 ```
 
-`/query` rewrites the question, decomposes it into a DAG, and runs that plan. The response is newline-delimited JSON (`application/x-ndjson`). Each result node is one line, `{"id", "response", "references"}`, written as soon as that node finishes. The server does not sort or join those lines. Only `retrieve` nodes call LightRAG. A result retrieve answers in one call; any other retrieve returns context only. `filter`, `transform`, `aggregate`, `compare`, `assemble`, `evaluate`, and `synthesize` are one LLM step over the parent outputs. The mode router runs once per retrieve node. Routable modes: `local`, `global`, `hybrid`, `naive`, `mix` (fallback). If decomposition fails, `/query` streams one line for a context-only retrieval of the original question, with `"id": null`. A failure after streaming has started is a final `{"error": "..."}` line.
+`/query` rewrites the question, decomposes it into a DAG, and runs that plan. The response is newline-delimited JSON (`application/x-ndjson`). Each result node is one line, `{"id", "response", "references"}`, written as soon as that node finishes. The server does not sort or join those lines. Only `retrieve` nodes call LightRAG, and every retrieve asks for context only. The executor evaluates that context. It may search again a limited number of times when the evaluation asks for a different query, then it stops. A result retrieve then writes an answer from the final context, the subquery, and any parent outputs, and that answer is the line's `response`. A retrieve that is not a result keeps the context for later nodes and is not yielded. `filter`, `transform`, `aggregate`, `compare`, `assemble`, `evaluate`, and `synthesize` are one LLM step over the parent outputs. The mode router runs on the first search of each retrieve node. A follow-up search uses the mode from the evaluation. Routable modes: `local`, `global`, `hybrid`, `naive`, `mix` (fallback). If decomposition fails, `/query` streams one line for a context-only retrieval of the original question, with `"id": null`. A failure after streaming has started is a final `{"error": "..."}` line.
 
 ## Docker Compose
 
-**Dev** (`docker compose up --build`) runs the wrapper in `LIGHTRAG_MODE=embedded` plus Postgres, Milvus, and Neo4j (Bloom).
+**Dev** (`docker compose up --build`) runs the wrapper in `LIGHTRAG_MODE=embedded` (from `env/wrapper/.env.dev`) plus the LightRAG server, Postgres, Milvus, and Neo4j (Bloom). The server WebUI is at http://127.0.0.1:9621. Inside the dev network the wrapper reaches it at `http://lightrag:9621`. Set `LIGHTRAG_MODE=server` in `env/wrapper/.env.dev` to send wrapper traffic there instead of the in-process SDK.
 
 ```bash
 xcopy /E /I env.example env
 docker compose up --build
 ```
 
-**Production overlay** switches the wrapper to server mode and starts the official LightRAG container against the same storage services. LightRAG WebUI is bound to localhost only.
+**Production** (`docker compose -f docker-compose.prod.yaml up --build`) is the same set of services, using `env/stack/prod` and `env/wrapper/.env.prod` (`LIGHTRAG_MODE=server`). It also starts the official LightRAG container. The WebUI is bound to localhost only. Run this file by itself.
 
 ```bash
-docker compose -f docker-compose.yaml -f docker-compose.prod.yaml up --build
+docker compose -f docker-compose.prod.yaml up --build
 ```
 
 Point leftover file-scratch dirs at a host disk with a project `.env` (Compose interpolation):
@@ -121,14 +126,14 @@ WRAPPER_UPLOADS=/var/lib/wrapper/uploads
 ```
 
 - Wrapper API: http://localhost:8000
-- LightRAG server / WebUI (prod overlay): http://127.0.0.1:9621
-- Neo4j Bloom: http://127.0.0.1:7474/bloom/ (bolt: `neo4j://127.0.0.1:7687`, user `neo4j`)
-- Postgres: `127.0.0.1:5432` (user/db `rag`)
-- Milvus: `http://127.0.0.1:19530`
+- LightRAG server / WebUI: http://127.0.0.1:9621
+- Neo4j Bloom: http://127.0.0.1:7474/bloom/ (bolt: `neo4j://127.0.0.1:7687`, user from `env/stack/dev/neo4j.env`)
+- Postgres: `127.0.0.1:5432` (user and database from `env/stack/dev/postgres.env`)
+- Milvus: `http://127.0.0.1:19530` (root user and password from `env/stack/dev/milvus.env`)
 
 Neo4j uses the Enterprise image with Bloom and a 30-day evaluation agreement (`NEO4J_ACCEPT_LICENSE_AGREEMENT=eval`). Drop a Bloom license into `./licenses` (mounted at `/licenses`) if you have one.
 
-A host-side `python -m lightrag_wrapper` uses `localhost` in `env/lightrag-config`; start the storage services first (`docker compose up postgres neo4j milvus milvus-etcd milvus-minio`).
+A host-side `python -m lightrag_wrapper` uses `localhost` from `env/lightrag-config` and the passwords from `env/stack/dev`. Start the storage services first (`docker compose up postgres neo4j milvus milvus-etcd milvus-minio`).
 
 If the LLM or embedding endpoint runs on the host (for example Ollama), use `host.docker.internal` in `LLM_BINDING_HOST` / `EMBEDDING_BINDING_HOST`.
 

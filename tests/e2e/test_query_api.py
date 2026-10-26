@@ -25,6 +25,14 @@ class ScriptedLLM:
                 ' "subquery": "Retrieve the Berlin annual leave accrual",'
                 ' "depends_on": [], "isResultNode": true}]'
             )
+        if "Evidence Evaluator" in system:
+            return (
+                '{"decision": "SUFFICIENT", "missing_information": [],'
+                ' "next_action": {"type": "SUFFICIENT", "purpose": null,'
+                ' "query": null, "mode": null}}'
+            )
+        if "user-facing answer" in system:
+            return "Employees accrue 18 days of annual leave."
         return (
             '{"rewritten_query": "Annual leave accrual for the Berlin office",'
             ' "high_level_keywords": ["employee leave policy"],'
@@ -121,6 +129,6 @@ def test_query_uses_rewriter_and_router(monkeypatch, tmp_path):
         rewritten, kwargs = holder["adapter"].last
         assert "Berlin" in rewritten
         assert kwargs["high_level_keywords"] == ["employee leave policy"]
-        assert kwargs["only_need_context"] is False
+        assert kwargs["only_need_context"] is True
         assert kwargs["include_references"] is True
         assert "leave-policy.pdf" in ScriptedLLM.last_decomposer_prompt

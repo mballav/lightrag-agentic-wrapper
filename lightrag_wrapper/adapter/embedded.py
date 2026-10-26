@@ -333,6 +333,8 @@ def _export_storage_env(config: LightRAGConfig) -> None:
         "MILVUS_URI": config.milvus_uri,
         "MILVUS_DB_NAME": config.milvus_db_name,
         "MILVUS_DEVICE": config.milvus_device,
+        "MILVUS_USER": config.milvus_user,
+        "MILVUS_PASSWORD": config.milvus_password,
     }
     for key, value in values.items():
         if value is not None:

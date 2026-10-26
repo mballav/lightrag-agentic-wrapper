@@ -31,30 +31,48 @@ def resolve_app_env(app_env: str | None = None) -> AppEnv:
 async def resolve_env_files(
     app_env: str | None = None,
     *,
+    stack_file: str | Path | None = None,
     wrapper_file: str | Path | None = None,
     lightrag_file: str | Path | None = None,
 ) -> tuple[str, ...]:
-    """Locate wrapper + LightRAG env files for the active APP_ENV.
+    """Locate env files for the active APP_ENV.
 
-    Later files override earlier ones, so wrapper settings win on conflicts.
-    Missing files are skipped so process env / Compose injection still works.
+    Order is client credentials (Postgres, Neo4j, Milvus), then LightRAG, then
+    wrapper. Later files override earlier ones. Missing files are skipped so
+    process env / Compose injection still works. MinIO is not loaded.
     """
     env_name = resolve_app_env(app_env)
-    wrapper = Path(
-        wrapper_file
-        or os.getenv("WRAPPER_ENV_FILE")
-        or Path("env") / "wrapper" / f".env.{env_name}"
+    stack = Path(
+        stack_file
+        or os.getenv("STACK_ENV_FILE")
+        or Path("env") / "stack" / env_name
     )
     lightrag = Path(
         lightrag_file
         or os.getenv("LIGHTRAG_ENV_FILE")
         or Path("env") / "lightrag-config" / f".env.{env_name}"
     )
+    wrapper = Path(
+        wrapper_file
+        or os.getenv("WRAPPER_ENV_FILE")
+        or Path("env") / "wrapper" / f".env.{env_name}"
+    )
     files: list[str] = []
-    for path in (lightrag, wrapper):
+    for path in (*_stack_paths(stack), lightrag, wrapper):
         if await aiofiles.ospath.isfile(path):
             files.append(str(path))
     return tuple(files)
+
+
+# Clients talk to Postgres, Neo4j, and Milvus. MinIO is only the Milvus object store.
+_CLIENT_STACK_FILES = ("postgres.env", "neo4j.env", "milvus.env")
+
+
+def _stack_paths(stack: Path) -> tuple[Path, ...]:
+    """Credential files the LightRAG client needs. ``minio.env`` is excluded."""
+    if stack.is_dir():
+        return tuple(stack / name for name in _CLIENT_STACK_FILES)
+    return (stack,)
 
 
 async def _load_dotenv_file(path: str | Path) -> dict[str, str]:
@@ -81,9 +99,10 @@ async def _apply_dotenv_files(files: tuple[str, ...]) -> None:
 class LightRAGConfig(BaseSettings):
     """Wrapper + LightRAG settings from env vars and split `.env` files.
 
-    Wrapper knobs live in `env/wrapper/.env.{dev|prod}`. LLM, embedding,
-    storage, and server process settings live in
-    `env/lightrag-config/.env.{dev|prod}`. `APP_ENV` selects which pair to load.
+    `env/stack/{dev|prod}/*.env` holds credentials shared with the data services.
+    `env/lightrag-config/.env.{dev|prod}` holds LLM, embedding, storage
+    endpoints, and server process settings. `env/wrapper/.env.{dev|prod}` holds
+    wrapper process settings. `APP_ENV` selects the set. Later files win.
     """
 
     model_config = SettingsConfigDict(
@@ -213,6 +232,14 @@ class LightRAGConfig(BaseSettings):
     milvus_uri: str = "http://localhost:19530"
     milvus_db_name: str = "lightrag"
     milvus_device: str = "cpu"
+    milvus_user: str | None = Field(
+        default=None,
+        description="Milvus root user. LightRAG reads this as MILVUS_USER.",
+    )
+    milvus_password: str | None = Field(
+        default=None,
+        description="Milvus root password. LightRAG reads this as MILVUS_PASSWORD.",
+    )
 
     # --- Indexing ---
     max_parallel_insert: int = Field(default=3, ge=1)
@@ -282,7 +309,7 @@ class LightRAGConfig(BaseSettings):
         *,
         app_env: str | None = None,
     ) -> LightRAGConfig:
-        """Build config from process env and the split wrapper/LightRAG files."""
+        """Build config from process env and the stack, LightRAG, and wrapper files."""
         if env_file is None:
             files = await resolve_env_files(app_env)
         elif isinstance(env_file, (str, Path)):

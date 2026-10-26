@@ -120,6 +120,20 @@ class APIDecomposer:
         )
 
 
+class APILLM:
+    async def complete_prompt(self, prompt, **kwargs):
+        system = kwargs.get("system_prompt") or ""
+        if "Evidence Evaluator" in system:
+            return (
+                '{"decision": "SUFFICIENT", "missing_information": [],'
+                ' "next_action": {"type": "SUFFICIENT", "purpose": null,'
+                ' "query": null, "mode": null}}'
+            )
+        if "user-facing answer" in system:
+            return "Berlin grants leave days according to the retrieved context."
+        return "assembled answer"
+
+
 class APIRouter:
     def __init__(self, llm):
         self.llm = llm
@@ -144,7 +158,7 @@ def api_app(monkeypatch, tmp_path):
 
     monkeypatch.setattr(app_module, "get_config", fake_get_config)
     monkeypatch.setattr(app_module, "create_adapter", fake_create)
-    monkeypatch.setattr(app_module, "LLMService", lambda config: object())
+    monkeypatch.setattr(app_module, "LLMService", lambda config: APILLM())
     monkeypatch.setattr(app_module, "QueryRewriter", APIRewriter)
     monkeypatch.setattr(app_module, "QueryModeRouter", APIRouter)
     monkeypatch.setattr(app_module, "QueryDecomposer", APIDecomposer)

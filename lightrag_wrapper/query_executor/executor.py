@@ -9,9 +9,15 @@ from typing import Annotated, TypedDict
 from langgraph.graph import END, START, StateGraph
 
 from lightrag_wrapper.adapter.base import LightRAGAdapter
+from lightrag_wrapper.answer_evaluator.evaluator import (
+    AnswerEvaluator,
+    Evaluation,
+    RetrievalAttempt,
+    UpstreamOutput,
+)
 from lightrag_wrapper.llm.service import LLMService
 from lightrag_wrapper.log import get_logger
-from lightrag_wrapper.models import QueryMode, QueryPlanNode, Reference
+from lightrag_wrapper.models import QueryMode, QueryPlanNode, QueryResult, Reference
 from lightrag_wrapper.router.query_mode import QueryModeRouter
 
 logger = get_logger(__name__)
@@ -26,6 +32,14 @@ _REASON_SYSTEM_PROMPT = (
     "You perform one operation in a retrieval plan. "
     "Use only the parent outputs and the user query. Do not retrieve and do not invent sources. "
     "Return only the operation result."
+)
+
+_SYNTHESIZE_SYSTEM_PROMPT = (
+    "You write the user-facing answer for one retrieval result. "
+    "Use only the retrieved context, the subquery, and the parent outputs when they are provided. "
+    "Do not use outside knowledge and do not invent sources. "
+    "If the context does not establish the subquery, say what is missing. "
+    "Return only the answer."
 )
 
 
@@ -74,10 +88,14 @@ class PlanExecutor:
         llm: LLMService,
         adapter: LightRAGAdapter,
         router: QueryModeRouter,
+        *,
+        max_extra_retrievals: int = 2,
     ) -> None:
         self._llm = llm
         self._adapter = adapter
         self._router = router
+        self._evaluator = AnswerEvaluator(llm)
+        self._max_extra_retrievals = max(0, max_extra_retrievals)
 
     async def stream(
         self,
@@ -149,30 +167,64 @@ class PlanExecutor:
         if parents:
             search = await self._resolve_search(node, parents)
         mode = await self._router.route(search)
-        keywords: dict[str, list[str] | None] = {
-            "high_level_keywords": None,
-            "low_level_keywords": None,
-        }
-        if not parents:
-            keywords = {
-                "high_level_keywords": context.high_level_keywords,
-                "low_level_keywords": context.low_level_keywords,
-            }
-        result = await self._adapter.query(
-            search,
-            mode=mode,
-            only_need_context=not node.is_result_node,
-            user_prompt=None,
-            conversation_history=context.conversation_history,
-            include_references=True,
-            **keywords,
-        )
+        attempts: list[RetrievalAttempt] = []
+        retrieved = ""
+        last_references: list[Reference] = []
+        result: QueryResult | None = None
+        extra_used = 0
+        while True:
+            keywords = _search_keywords(context, root=not parents, first_search=not attempts)
+            result = await self._adapter.query(
+                search,
+                mode=mode,
+                only_need_context=True,
+                user_prompt=None,
+                conversation_history=context.conversation_history,
+                include_references=True,
+                **keywords,
+            )
+            retrieved = result.response
+            last_references = list(result.references or [])
+            evaluation = await self._evaluator.evaluate(
+                subquery=node.subquery,
+                context=retrieved,
+                references=result.references,
+                parents=_upstream(parents),
+                attempts=attempts,
+            )
+            if evaluation is None:
+                break
+            attempts.append(
+                RetrievalAttempt(
+                    query=search,
+                    mode=mode.value,
+                    outcome=_attempt_outcome(evaluation),
+                )
+            )
+            if evaluation.decision != "RETRIEVE_MORE":
+                break
+            if extra_used >= self._max_extra_retrievals:
+                break
+            if evaluation.next_query is None or evaluation.next_mode is None:
+                break
+            if _repeats_search(evaluation.next_query, attempts):
+                break
+            search = evaluation.next_query
+            mode = evaluation.next_mode
+            extra_used += 1
+
+        assert result is not None
+        output = retrieved
+        if node.is_result_node:
+            output = await self._synthesize(node, parents, retrieved)
         return NodeArtifact(
             node_id=node.id,
             node_type=node.node_type,
             subquery=node.subquery,
-            output=result.response,
-            references=_union_references([parent.references for parent in parents] + [result.references or []]),
+            output=output,
+            references=_union_references(
+                [parent.references for parent in parents] + [last_references]
+            ),
             is_result_node=node.is_result_node,
             mode=result.mode,
             response_time=result.response_time,
@@ -190,6 +242,24 @@ class PlanExecutor:
         )
         resolved = _as_text(raw).strip().strip('"')
         return resolved or node.subquery
+
+    async def _synthesize(
+        self,
+        node: QueryPlanNode,
+        parents: list[NodeArtifact],
+        retrieved: str,
+    ) -> str:
+        prompt = (
+            f"Subquery:\n{node.subquery}\n\n"
+            f"Retrieved context:\n{retrieved}\n\n"
+            f"Parent outputs:\n{_format_upstream(parents)}"
+        )
+        raw = await self._llm.complete_prompt(
+            prompt,
+            system_prompt=_SYNTHESIZE_SYSTEM_PROMPT,
+            temperature=0,
+        )
+        return _as_text(raw).strip()
 
     async def _reason(
         self,
@@ -215,6 +285,48 @@ class PlanExecutor:
             references=_union_references([parent.references for parent in parents]),
             is_result_node=node.is_result_node,
         )
+
+
+def _search_keywords(
+    context: _CallContext,
+    *,
+    root: bool,
+    first_search: bool,
+) -> dict[str, list[str] | None]:
+    if root and first_search:
+        return {
+            "high_level_keywords": context.high_level_keywords,
+            "low_level_keywords": context.low_level_keywords,
+        }
+    return {"high_level_keywords": None, "low_level_keywords": None}
+
+
+def _upstream(parents: list[NodeArtifact]) -> list[UpstreamOutput]:
+    return [
+        UpstreamOutput(node_id=parent.node_id, node_type=parent.node_type, output=parent.output)
+        for parent in parents
+    ]
+
+
+def _format_upstream(parents: list[NodeArtifact]) -> str:
+    if not parents:
+        return "None."
+    return "\n\n".join(
+        f"[Upstream node {parent.node_id}, {parent.node_type}]\n{parent.output}"
+        for parent in parents
+    )
+
+
+def _attempt_outcome(evaluation: Evaluation) -> str:
+    missing = "; ".join(evaluation.missing_information)
+    if missing:
+        return f"{evaluation.decision}. Missing: {missing}"
+    return evaluation.decision
+
+
+def _repeats_search(query: str, attempts: list[RetrievalAttempt]) -> bool:
+    folded = query.strip().casefold()
+    return any(attempt.query.strip().casefold() == folded for attempt in attempts)
 
 
 def _dependency_ids(node: QueryPlanNode) -> list[int]:

@@ -98,6 +98,29 @@ def test_parse_decomposition_rejects_incomplete_result_structure():
     assert [node.id for node in nodes] == [1, 2, 3]
 
 
+def test_parse_decomposition_renumbers_ids_in_depth_first_order():
+    raw = """
+    [
+      {"Id": 1, "nodeType": "retrieve", "subquery": "Branch A root.", "depends_on": [], "isResultNode": false},
+      {"Id": 2, "nodeType": "retrieve", "subquery": "Branch B root.", "depends_on": [], "isResultNode": true},
+      {"Id": 3, "nodeType": "retrieve", "subquery": "Branch A middle.", "depends_on": [1], "isResultNode": false},
+      {"Id": 4, "nodeType": "retrieve", "subquery": "Branch A leaf.", "depends_on": [3], "isResultNode": true}
+    ]
+    """
+    nodes = parse_decomposition(raw)
+    assert nodes is not None
+    assert [node.subquery for node in nodes] == [
+        "Branch A root.",
+        "Branch A middle.",
+        "Branch A leaf.",
+        "Branch B root.",
+    ]
+    assert [node.id for node in nodes] == [1, 2, 3, 4]
+    assert nodes[1].depends_on == [1]
+    assert nodes[2].depends_on == [2]
+    assert nodes[3].depends_on == []
+
+
 class _CatalogAdapter:
     def __init__(self, catalog):
         self.catalog = catalog

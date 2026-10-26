@@ -22,21 +22,32 @@ def test_resolve_app_env(monkeypatch):
 
 
 async def test_resolve_env_files_skips_missing(tmp_path, monkeypatch):
+    monkeypatch.delenv("STACK_ENV_FILE", raising=False)
     monkeypatch.delenv("WRAPPER_ENV_FILE", raising=False)
     monkeypatch.delenv("LIGHTRAG_ENV_FILE", raising=False)
     monkeypatch.chdir(tmp_path)
     assert await resolve_env_files("dev") == ()
 
+    stack = tmp_path / "env" / "stack" / "dev"
     wrapper = tmp_path / "env" / "wrapper"
     lightrag = tmp_path / "env" / "lightrag-config"
+    stack.mkdir(parents=True)
     wrapper.mkdir(parents=True)
     lightrag.mkdir(parents=True)
+    (stack / "postgres.env").write_text("POSTGRES_USER=lightrag\n", encoding="utf-8")
+    (stack / "minio.env").write_text("MINIO_ROOT_USER=minioadmin\n", encoding="utf-8")
     (lightrag / ".env.dev").write_text("LLM_MODEL=from-file\n", encoding="utf-8")
     (wrapper / ".env.dev").write_text("LOG_LEVEL=DEBUG\n", encoding="utf-8")
     files = await resolve_env_files("dev")
-    assert [Path(item).name for item in files] == [".env.dev", ".env.dev"]
-    assert "lightrag-config" in files[0]
-    assert "wrapper" in files[1]
+    assert [Path(item).name for item in files] == [
+        "postgres.env",
+        ".env.dev",
+        ".env.dev",
+    ]
+    assert "minio.env" not in {Path(item).name for item in files}
+    assert "stack" in files[0]
+    assert "lightrag-config" in files[1]
+    assert "wrapper" in files[2]
 
 
 async def test_resolve_env_files_explicit_override(tmp_path):
@@ -44,7 +55,10 @@ async def test_resolve_env_files_explicit_override(tmp_path):
     wrap = tmp_path / "wrap.env"
     rag.write_text("LLM_MODEL=a\n", encoding="utf-8")
     files = await resolve_env_files(
-        "prod", wrapper_file=wrap, lightrag_file=rag
+        "prod",
+        stack_file=tmp_path / "absent.env",
+        wrapper_file=wrap,
+        lightrag_file=rag,
     )
     assert files == (str(rag),)
 

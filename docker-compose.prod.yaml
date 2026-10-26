@@ -1,84 +1,71 @@
-# Production overlay: wrapper talks to a standalone LightRAG server.
-#   docker compose -f docker-compose.yaml -f docker-compose.prod.yaml up --build
+# Production stack: wrapper API talks to a standalone LightRAG server.
+#   docker compose -f docker-compose.prod.yaml up --build
 #
-# Postgres, Milvus, and Neo4j+Bloom are defined in docker-compose.yaml and
-# are reused here. Do not redefine those services in this overlay: Compose
-# concatenates list fields (ports, security_opt, volumes) and would break
-# the Milvus/Neo4j containers.
+# Same services as docker-compose.yaml, with prod credential files and the
+# LightRAG server. Run this file on its own. Combining it with
+# docker-compose.yaml concatenates ports, volumes, and env_file lists.
 #
-# Host data directories for the server (Compose interpolation):
-#   LIGHTRAG_RAG_STORAGE=/var/lib/lightrag/rag_storage
-#   LIGHTRAG_INPUTS=/var/lib/lightrag/inputs
-#   WRAPPER_UPLOADS=/var/lib/wrapper/uploads
-#   NEO4J_LICENSES=/var/lib/neo4j/licenses
+# Configuration:
+#   env/stack/prod/*.env        one credential file per data service
+#   env/lightrag-config/.env.prod
+#   env/wrapper/.env.prod
+# `environment` below only replaces hostnames and paths inside the Docker network.
 #
-# `!override` replaces lists from docker-compose.yaml. Without it, Compose
-# would keep the embedded volume mounts and load both .env.dev and .env.prod.
+# ${APP_PORT} and the other ${...} host bindings read a project `.env` or the
+# shell. They do not read the env files above.
+#
+# Host data paths (Compose interpolation):
+#   LIGHTRAG_RAG_STORAGE=/path/on/host/server-rag-storage
+#   LIGHTRAG_INPUTS=/path/on/host/server-inputs
+#   WRAPPER_UPLOADS=/path/on/host/wrapper-uploads
+#   NEO4J_LICENSES=/path/on/host/neo4j-licenses   # optional Bloom license file dir
 
-x-lightrag-storage-env: &lightrag-storage-env
-  LIGHTRAG_KV_STORAGE: PGKVStorage
-  LIGHTRAG_DOC_STATUS_STORAGE: PGDocStatusStorage
-  LIGHTRAG_GRAPH_STORAGE: Neo4JStorage
-  LIGHTRAG_VECTOR_STORAGE: MilvusVectorDBStorage
+x-container-env: &container-env
   POSTGRES_HOST: postgres
-  POSTGRES_PORT: "5432"
-  POSTGRES_USER: ${POSTGRES_USER:-lightrag}
-  POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-pL6y*Hf9Vr2cN8tQ4bX7mJ3w}
-  POSTGRES_DATABASE: ${POSTGRES_DATABASE:-lightrag}
-  POSTGRES_MAX_CONNECTIONS: "25"
   NEO4J_URI: neo4j://neo4j:7687
-  NEO4J_USERNAME: ${NEO4J_USERNAME:-lightrag}
-  NEO4J_PASSWORD: ${NEO4J_PASSWORD:-G5dZ=kP1sW8nR3uY6fH2qT9c}
-  NEO4J_DATABASE: neo4j
   MILVUS_URI: http://milvus:19530
-  MILVUS_DB_NAME: ${MILVUS_DB_NAME:-lightrag}
-  MILVUS_DEVICE: cpu
+  DOCLING_ENDPOINT: http://docling:5001
+  WORKING_DIR: /app/data/rag_storage
+  INPUT_DIR: /app/data/inputs
 
 services:
   app:
+    build: .
+    ports:
+      - "${APP_PORT:-8000}:8000"
     env_file:
-      - env/wrapper/.env.prod
+      - env/stack/prod/postgres.env
+      - env/stack/prod/neo4j.env
+      - env/stack/prod/milvus.env
       - env/lightrag-config/.env.prod
+      - env/wrapper/.env.prod
     environment:
-      <<: *lightrag-storage-env
-      APP_ENV: prod
-      LIGHTRAG_MODE: server
-      LIGHTRAG_SERVER_URL: http://lightrag:9621
+      <<: *container-env
       APP_HOST: 0.0.0.0
-      APP_PORT: "8000"
-      LIGHTRAG_PARSER: "*:docling;*:legacy"
-      DOCLING_ENDPOINT: http://docling:5001
       WRAPPER_UPLOAD_DIR: /app/data/wrapper/uploads
-      WORKING_DIR: /app/data/rag_storage
-      INPUT_DIR: /app/data/inputs
+      LIGHTRAG_SERVER_URL: http://lightrag:9621
     volumes:
       - ${LIGHTRAG_RAG_STORAGE:-./data/server/rag_storage}:/app/data/rag_storage
       - ${LIGHTRAG_INPUTS:-./data/server/inputs}:/app/data/inputs
       - ${WRAPPER_UPLOADS:-./data/wrapper/uploads}:/app/data/wrapper/uploads
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     depends_on:
       lightrag:
         condition: service_healthy
-      postgres:
-        condition: service_healthy
-      neo4j:
-        condition: service_healthy
-      milvus:
-        condition: service_healthy
+    restart: unless-stopped
 
   lightrag:
     image: ghcr.io/hkuds/lightrag:latest
     ports:
       - "127.0.0.1:${LIGHTRAG_PORT:-9621}:9621"
     env_file:
+      - env/stack/prod/postgres.env
+      - env/stack/prod/neo4j.env
+      - env/stack/prod/milvus.env
       - env/lightrag-config/.env.prod
     environment:
-      <<: *lightrag-storage-env
-      HOST: 0.0.0.0
-      PORT: "9621"
-      WORKING_DIR: /app/data/rag_storage
-      INPUT_DIR: /app/data/inputs
-      LIGHTRAG_PARSER: "*:docling;*:legacy"
-      DOCLING_ENDPOINT: http://docling:5001
+      <<: *container-env
     volumes:
       - ${LIGHTRAG_RAG_STORAGE:-./data/server/rag_storage}:/app/data/rag_storage
       - ${LIGHTRAG_INPUTS:-./data/server/inputs}:/app/data/inputs
@@ -105,14 +92,30 @@ services:
       start_period: 60s
     restart: unless-stopped
 
+  docling:
+    image: ghcr.io/docling-project/docling-serve-cpu:latest
+    ports:
+      - "127.0.0.1:${DOCLING_PORT:-5001}:5001"
+    environment:
+      DOCLING_SERVE_ENABLE_UI: "false"
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:5001/health')\"",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 40
+      start_period: 180s
+    restart: unless-stopped
+
   postgres:
     image: postgres:16-bookworm
     ports:
       - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
-    environment:
-      POSTGRES_USER: ${POSTGRES_USER:-lightrag}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-pL6y*Hf9Vr2cN8tQ4bX7mJ3w}
-      POSTGRES_DB: ${POSTGRES_DATABASE:-lightrag}
+    env_file:
+      - env/stack/prod/postgres.env
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -128,8 +131,9 @@ services:
     ports:
       - "127.0.0.1:${NEO4J_HTTP_PORT:-7474}:7474"
       - "127.0.0.1:${NEO4J_BOLT_PORT:-7687}:7687"
+    env_file:
+      - env/stack/prod/neo4j.env
     environment:
-      NEO4J_AUTH: ${NEO4J_USERNAME:-lightrag}/${NEO4J_PASSWORD:-G5dZ=kP1sW8nR3uY6fH2qT9c}
       NEO4J_ACCEPT_LICENSE_AGREEMENT: ${NEO4J_ACCEPT_LICENSE_AGREEMENT:-eval}
       NEO4J_PLUGINS: '["bloom"]'
       NEO4J_dbms_security_procedures_unrestricted: bloom.*
@@ -161,11 +165,12 @@ services:
       - seccomp:unconfined
     ports:
       - "127.0.0.1:${MILVUS_PORT:-19530}:19530"
+    env_file:
+      - env/stack/prod/milvus.env
+      - env/stack/prod/minio.env
     environment:
       ETCD_ENDPOINTS: milvus-etcd:2379
       MINIO_ADDRESS: milvus-minio:9000
-      MINIO_ACCESS_KEY_ID: ${MINIO_ACCESS_KEY_ID:-minioadmin}
-      MINIO_SECRET_ACCESS_KEY: ${MINIO_SECRET_ACCESS_KEY:-tR4c#Jm9wQ2nX7bK5hP8sL1v}
     volumes:
       - milvus_data:/var/lib/milvus
     healthcheck:
@@ -182,7 +187,7 @@ services:
     restart: unless-stopped
 
   milvus-etcd:
-    image: quay.io/coreos/etcd:v3.5.25
+    image: milvusdb/etcd:3.5.25-r1
     environment:
       ETCD_AUTO_COMPACTION_MODE: revision
       ETCD_AUTO_COMPACTION_RETENTION: "1000"
@@ -204,9 +209,8 @@ services:
 
   milvus-minio:
     image: minio/minio:RELEASE.2025-09-07T16-13-09Z
-    environment:
-      MINIO_ROOT_USER: ${MINIO_ACCESS_KEY_ID:-minioadmin}
-      MINIO_ROOT_PASSWORD: ${MINIO_SECRET_ACCESS_KEY:-tR4c#Jm9wQ2nX7bK5hP8sL1v}
+    env_file:
+      - env/stack/prod/minio.env
     volumes:
       - milvus-minio_data:/minio_data
     command: minio server /minio_data --console-address ":9001"

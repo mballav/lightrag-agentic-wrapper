@@ -1,0 +1,173 @@
+AGENTIC RAG EVALUATION SET
+50 complex, multi-hop questions based on the five uploaded Acadia Statements of Work (SOWs)
+
+Purpose
+Use these questions to test a LightRAG-backed agentic wrapper's retrieval, cross-document routing, multi-hop reasoning, arithmetic, scope-boundary detection, uncertainty handling, and source-grounded responses.
+
+Documents represented
+1. Fana Jewelry — 2023 SOW
+2. Hexagon / Intergraph Corporation — SEO Post-Launch Remediation SOW
+3. Ethos Pet Brands — Paid Media and Analytics SOW
+4. Forward Storage — SEO SOW
+5. Hoffman Media — Analytics / Segmentation and LTV SOW
+
+Evaluation guidance
+- Answer from the source documents, not general assumptions.
+- Keep client-specific terms separate; do not transfer pricing or notice periods between clients.
+- Show arithmetic and state assumptions where a calculation depends on interpretation.
+- Distinguish contractual commitments, objectives, optional services, and recommendations.
+- If a detail is absent, say so and name the additional evidence needed.
+- Prefer precise citations to document/page/section wherever your wrapper supports them.
+- These are questions only; no answer key is included, so the file can be used as a test set.
+
+============================================================
+
+01. Fana Jewelry — Scope reconstruction and boundary detection
+Using the Fana Jewelry SOW effective February 1, 2023, reconstruct the complete monthly organic-social workflow from asset sourcing through publishing, community engagement, and reporting. State the monthly content volume, all covered platforms, caption inclusion, the stated response window and inbound-question cap, reporting cadence, and the role of Acadia's software. Then distinguish the included work from retailer asset support, which is priced separately, and explain what the document does—and does not—say about response obligations when inbound volume exceeds the stated cap.
+
+02. Fana Jewelry — Production calendar and deliverable arithmetic
+Fana wants to plan a 12-month content calendar using the SOW's quarterly production commitments. Calculate the nominal annual number of static photography shoots and TikTok/Reels shoots, and the typical annual ranges of photo assets and video assets implied by the stated per-shoot quantities. Explain why these are planning estimates rather than guaranteed exact annual totals, and include the requirement for advance scheduling and the stated deadline for creating a shared photo stream.
+
+03. Fana Jewelry — Paid-social channel expansion
+The client asks Acadia to add a fifth paid-social network to the listed Facebook, Instagram, Pinterest, and TikTok mix. Explain the contractual route required for expansion, the additional monthly investment stated for each additional network, and how this differs from the SOW's existing monthly paid-social management fee. Identify which creative assets are included monthly, which asset sources are expected to be used, and why custom photography or videography should not be assumed to be included at no extra cost.
+
+04. Fana Jewelry — A-la-carte content and design budget
+The marketing lead requests 20 additional content pieces per month above the base package, plus 6 hours of graphic design and animation each month. Calculate the monthly additional cost using the stated pricing, excluding taxes or unlisted fees. Explain how the extra content quantity maps to the SOW's 10-piece additional set pricing, and flag any assumptions that must be confirmed before treating the result as an approved quote.
+
+05. Fana Jewelry — Influencer campaign feasibility
+A stakeholder proposes a one-month influencer campaign with a $3,000 paid partnership budget and asks Acadia to select creators, negotiate, execute the campaign, and report KPIs. Compare the request with the SOW's influencer-management requirements, including the management fee, minimum campaign duration, minimum paid-partnership budget, and the explicit exclusions around product payment and shipment. Identify each mismatch and calculate the minimum stated management-fee commitment and minimum dedicated paid-influencer budget for a compliant campaign.
+
+06. Fana Jewelry — Shoot cancellation and travel exposure
+A video shoot is scheduled outside Georgia. The client postpones it four days before the shoot, and a model has already been booked; separately, the client asks for travel reimbursement estimates. Explain the SOW's cancellation/postponement rule for notice under five days, the model-fee rules for cancellation within three days versus within five days, and the travel expense categories and per-diem rates. Do not invent an exact total where model duration, headcount, transport, equipment, or accommodation prices are unknown; specify the data needed to calculate it.
+
+07. Fana Jewelry — Monthly retainer, renewal, and early termination
+Calculate the original monthly retainer by combining the stated organic social/photography/video and paid-social components, then calculate the monthly fee after one 7% renewal increase if the same base applies. Explain the SOW's stated end date, automatic renewal period, written notice needed to avoid renewal, and separate early-termination notice and remaining-term payment formula. Point out why the renewal notice and early-termination provisions must not be collapsed into one rule.
+
+08. Fana Jewelry — Reporting and staffing accountability
+A client executive says that quarterly campaign presentations mean Acadia only needs to meet quarterly. Use the SOW to assess this claim, distinguishing monthly formal reporting and at-least-monthly strategic meetings from quarterly campaign presentations and strategy meetings. Name the account-team roles listed and explain how the stated reporting layers serve different purposes without assuming unlisted service-level guarantees.
+
+09. Hexagon — High-value page investigation plan
+For the Hexagon SEO remediation SOW, design a source-grounded investigation plan for finding high-value pages lost or disconnected during a website migration. List every required input named in the SOW, explain why historical Google Analytics data must be URL-based and filtered to the exact hostname, and identify the role of historical Google Search Console data and Semrush or Ahrefs. Describe the expected findings document, presentation, and supporting spreadsheet, including the three possible recommended actions for affected pages.
+
+10. Hexagon — Metrics and evidence triangulation
+A page has strong historical organic sessions in Google Analytics but few recorded conversions, while Semrush shows ranking keywords and Search Console data is available for top URLs by division. Explain which metrics the SOW explicitly calls for, which source supplies each metric, and how the evidence should be presented without treating a ranking metric as proof of conversions. State the stated scope limitation on Search Console keyword data and explain what additional client confirmation is required about content changes or deletions.
+
+11. Hexagon — Dependencies and delivery timeline
+Create a dependency-aware timeline for all three Hexagon initiatives: high-value page analysis, indexation analysis/XML sitemap creation, and meta title/description optimization. Include the stated analysis windows, the approximate progress-check meeting, the common delivery date, and the required client inputs for each initiative. Identify which missing access or URL lists would block work, and distinguish a planned delivery date from a guaranteed early delivery.
+
+12. Hexagon — XML sitemap acceptance checklist
+The client supplies Google Search Console admin access for hexagon.com but has not yet supplied the URL list to include in the XML sitemap. Explain why one prerequisite is met but the other remains outstanding. Build an acceptance checklist from the SOW's named deliverables: presentation, spreadsheet of remediation recommendations, and optimized XML sitemap. Avoid adding technical acceptance criteria that are not stated in the document; label any proposed criteria as suggestions rather than contractual requirements.
+
+13. Hexagon — Meta metadata remediation at scale
+Hexagon confirms 114 English-language URLs and supplies supporting documentation for metadata. Describe the SOW's exact scope, required inputs, analysis period, recommendation delivery date, and expected Google Sheet columns or contents. If the client later asks for 150 pages or additional languages, explain what the current document establishes and what it leaves unresolved, rather than silently expanding the fixed 114-page English-language scope.
+
+14. Hexagon — Budget and invoicing interpretation
+A finance analyst needs to forecast the Hexagon project's agency fee and invoice timing. State the total rate-schedule amount, the stated invoicing date, and the dependency on client purchase-order direction. Explain the project term and why the document does not provide a per-initiative price allocation that would justify assigning arbitrary portions of the total to the three initiatives.
+
+15. Hexagon — Missing evidence and calibrated answers
+A user asks the wrapper to name every missing page, state the exact organic traffic lost, and identify which deleted content Hexagon approved. The SOW describes the investigation but does not contain the underlying analytics export, page-level supplement, or confirmation of individual deletions. Explain what a reliable RAG response should answer from the SOW, what must be retrieved from supporting data or requested from Hexagon, and how it should explicitly communicate that the requested page-level facts are not present in the SOW itself.
+
+16. Ethos Pet Brands — Channel scope and service taxonomy
+Using the Ethos Pet Brands SOW effective February 1, 2024, distinguish the paid-media channels listed from the services included in full-service media management. Explain the roles of paid search, paid social, optimization, demographic and keyword selection, landing-page recommendations, remarketing, text-ad optimization, local advertising, creative-agency coordination, and quarterly full-agency-counsel coordination. State how expansion to additional channels is treated and do not infer an unstated expansion price.
+
+17. Ethos Pet Brands — Media fee scenarios
+Apply the media rate table exactly as written to monthly spend scenarios of $200,000, $300,000, $400,000, $500,000, $600,000, and $750,000. For each scenario, identify the applicable row and calculate the stated fee using the row's fixed-fee or percentage language. Highlight any ambiguity at boundary values or between bands, if relevant, and do not invent a fee rule for spend above the highest listed band. Treat the $25,000 minimum monthly fee as a key constraint.
+
+18. Ethos Pet Brands — Dashboard scope and total recurring cost
+The client wants separate dashboards for Natural Balance and Canidae, with paid-search, paid-social, and Google Analytics integration, daily/weekly/monthly/quarterly views, and both operational and board-level reporting. Explain which of these capabilities are stated in the SOW and calculate the dashboarding fee for one month and twelve months. Then calculate illustrative combined monthly costs at $250,000 and $400,000 media spend when the dashboard fee is added, while clearly separating agency service fees from media payments made directly to Google, Meta, and Bing.
+
+19. Ethos Pet Brands — Optional performance creative selection
+The client is comparing all options under Optional Performance Creative. Enumerate each option accurately, preserving the asset count, aspect ratios, iterations, and monthly versus quarterly cadence. Calculate the deliverable totals where the SOW explicitly gives totals, and explain why the options should be treated as alternatives rather than all automatically included together. Include the two rounds of revisions and the stated additional-revision fee.
+
+20. Ethos Pet Brands — Termination and scope-reduction test
+The client wants to cancel a service immediately, and the proposed reduction would lower total SOW fees by 15%. Explain the ordinary written termination notice, the separate 30-day notice restriction for a reduction or cancellation that causes more than a 10% fee reduction, the good-faith fee-negotiation period, and the rule about pausing services and possible onboarding fees when resuming. Distinguish these provisions and avoid claiming that service can be paused immediately without agreement.
+
+21. Ethos Pet Brands — Meeting cadence and reporting interpretation
+A project manager interprets “formal reporting monthly” as meaning client meetings occur only monthly. Test this interpretation against the SOW's weekly meetings and monthly business review. Explain what weekly meetings cover, what monthly reporting/reviews cover, which team roles are named, and how the dashboard views relate to—but do not replace—the formal reporting and meeting commitments.
+
+22. Ethos Pet Brands — Contract dates and renewal status
+Explain the SOW's effective date, stated term end date of December 31, 2024, month-to-month continuation thereafter until termination, and either party's right to terminate on 30 days' written notice. If asked whether the contract is still active on a later date, explain why the SOW alone establishes the contractual continuation mechanism but does not prove whether a later termination notice, amendment, or replacement agreement occurred.
+
+23. Forward Storage — Multi-property SEO architecture
+Design a source-grounded SEO approach for Forward Storage's portfolio that separates corporate location pages from individual standalone property websites. Explain the purpose of competitive research, Adobe XD wireframes with SEO specifications, the location-page template and standalone-property template work, the strategic SEO playbook, and the concurrent support model for 22 locations. Describe how the scope supports scalable local visibility without promising specific rankings or traffic outcomes that the SOW does not guarantee.
+
+24. Forward Storage — Revision limits by deliverable
+A client submits four rounds of revisions to location-page wireframes and three rounds to each standalone property template. Compare the request with the SOW's stated revision allowances for location-page wireframes and for up to three standalone-property page templates. Identify which requested rounds exceed the stated allowances and explain why the wrapper should not assume extra rounds are free or invent a specific overage price where none is given.
+
+25. Forward Storage — Ongoing SEO monthly fee model
+The initial ongoing SEO floor is $6,500 per month for 22 locations, and additional specified existing properties are priced at $230 per location per month. Calculate the monthly fee for the base 22 locations, for 27 locations, and for 32 locations if all additional locations are chargeable under the stated rule. Explain the distinction between the included initial 22-location floor and additional properties, and state the 30-day advance-notice expectations for adding or ending support for existing properties.
+
+26. Forward Storage — Six-month term and billing calendar
+The SOW is dated April 8, 2024, states prorated billing for April, and begins monthly retainer billing on May 1, 2024. The initial ongoing SEO term is six months followed by reassessment. Build a careful timeline that distinguishes the effective date, April proration, monthly billing start, initial six-month commitment, and later renegotiation. If calculating a total for the six-month period, state assumptions about which months are included and do not fabricate the prorated April amount because no proration formula is supplied.
+
+27. Forward Storage — Scope flexibility and prioritization
+Forward Storage asks Acadia to rotate effort among corporate location pages and individual in-market property sites as needs change, while keeping support for 22 locations concurrent. Explain what flexibility the SOW expressly allows, what remains a concurrent commitment, how the $230 per-location pro-rata fee applies to additional existing properties, and what the SOW does not specify about exact hours or equal effort per location. Recommend what must be clarified before the client interprets “flexibly within budget restraints” as unlimited work.
+
+28. Forward Storage — Risk and liability clauses
+A client asks whether all business losses caused by an SEO error would automatically be reimbursed. Summarize the SOW's limitation on indirect, special, incidental, and consequential damages, the stated exceptions for indemnification, gross negligence, and willful misconduct, the six-month service-fee liability cap excluding third-party fees, and the one-year deadline for claims. Explain why a wrapper should describe the written clause neutrally and avoid making a legal determination about whether a specific claim qualifies for an exception.
+
+29. Forward Storage — Evidence gaps in SEO performance claims
+A stakeholder asks for guaranteed ranking gains, a fixed number of backlinks, weekly implementation hours, and a promise that every property will rank first in local results. Compare these requests with the SOW's objectives, audit/template/playbook scope, monthly reporting, and twice-monthly strategic meetings. Identify which items are not promised in the document and explain how to distinguish the stated goal of increased organic visibility from a contractual guarantee of a particular outcome.
+
+30. Forward Storage — Combined deliverables and acceptance narrative
+Prepare an acceptance-oriented summary of the initial audit and ongoing-growth scope. Include competitive research in selected markets, location-page wireframes and SEO specifications, standalone-site best-practice analysis, up to three page templates, revision allowances, the strategic playbook's content/UX, technical, and off-site SEO areas, shared services for 22 locations, monthly reporting, and at-least-twice-monthly meetings. Separate concrete deliverables from goals and recurring services, and flag any acceptance criteria not expressly specified.
+
+31. Hoffman Media — Segmentation pipeline end to end
+Using the Hoffman Media SOW, explain the planned customer-segmentation workflow from first-party data ingestion through cleaning, third-party demographic enrichment, segment analysis, and exportable audiences for marketing channels. Identify the listed first-party fields, explain the intended use of high-, mid-, and low-LTV segments, and describe the integration of updated segmentation and LTV values into campaign segmentation, creative production, and conversion-value modeling. Do not claim the model has already been built or validated merely because the SOW describes it.
+
+32. Hoffman Media — LTV model outputs and decision support
+Hoffman Media wants to forecast customer lifetime value overall and by segment. Explain exactly what the SOW commits to regarding LTV-model development and forecasting, and how higher-LTV segments may support retention and lookalike audience expansion while mid-to-low-LTV segments may be optimized to raise LTV or managed to keep acquisition cost proportional to revenue value. Identify what the SOW does not define—such as the exact model formula, forecast horizon, validation metric, or guaranteed performance lift—and what would need separate agreement or evidence.
+
+33. Hoffman Media — Fee calculations for demographic appending
+The initial segmentation and LTV effort is priced at $27,500. Separately, appending physical addresses to newsletter subscriber records is priced at $0.07 per record appended, with the workflow first appending a physical address and then household demographic data. Calculate the address-append fee for 10,000, 50,000, and 100,000 records, and calculate the combined initial effort plus each scenario's append fee. Explain why the per-record fee should not be misrepresented as an all-inclusive price for every downstream service unless the document supports that interpretation.
+
+34. Hoffman Media — Data prerequisites and sequencing
+A client has email addresses for newsletter subscribers but lacks physical addresses and purchase history for some records. Explain the distinction between the core segmentation model's stated inputs—email address, billing address, and purchase history—and the optional subscriber-enrichment process that first appends physical addresses before household demographic data. Describe the discovery/review of first-party data sources and centralized-warehouse opportunity, and identify which gaps could affect completeness without inventing a guaranteed match rate.
+
+35. Hoffman Media — Initial analysis versus ongoing refresh
+The client assumes customer segments will be refreshed every month because the service is called “managed.” Interpret the SOW's statement that Acadia provides an initial analysis and the client may opt to refresh segments later as additional scope. Explain what is included in the initial effort, what requires an optional later decision, and how the wrapper should answer questions about refresh cadence, refresh price, or continuing maintenance when those details are not specified.
+
+36. Hoffman Media — Security certification scope
+The client asks whether every Acadia business unit is covered by the security measures in Appendix A. Explain the statement that the Acadia Data Platform is described as meeting specified data-protection requirements including GDPR Article 28 and SOC 2 Type 2, and the explicit caveat that other business units may have different measures. Distinguish the named platform/security claims from a broader organization-wide certification claim, and avoid inferring certifications or legal compliance beyond the text.
+
+37. Hoffman Media — Access controls and authentication
+A security reviewer asks for every relevant access-control commitment described in the appendix. Summarize approval for logical access, revocation after termination, quarterly access reviews, unique identifiers, prohibition on shared accounts, session protection after 30 minutes, account lockout after three failed attempts, password length and complexity, reuse prevention across 12 prior passwords, 90-day password changes, VPN access, and restricted source-code modification. Organize these controls by identity, authentication, remote access, and privileged access without omitting their stated thresholds.
+
+38. Hoffman Media — Physical, network, and environmental safeguards
+Construct a security-control inventory from Appendix A covering third-party data-center management and annual SOC 2 Type 2 certification, card-key/keypad access, monitored surveillance, management approval for physical entry, temperature and humidity monitoring, fire detection/suppression, corporate office access, 24/7 Network Operations Center, firewall policy enforcement, IPS/firewalls/DMZ, antivirus and email scanning, and production/non-production segregation. Distinguish controls expressly described from any conclusion about their effectiveness or incident-free operation, which the SOW does not establish.
+
+39. Hoffman Media — Personnel security and change management
+A vendor-risk questionnaire asks how personnel and production changes are controlled. Summarize the stated pre-hire background checks for personnel accessing the Data Platform, employee and contractor NDAs, annual security-awareness training, code-of-business-conduct training, documented configuration hardening, approval before production software installation, and documented change-control workflow with risk-based notifications and approvals. Explain which items apply specifically to personnel accessing the platform and why the SOW should not be paraphrased as guaranteeing zero insider risk.
+
+40. Hoffman Media — Data privacy and sensitive enrichment
+The segmentation model uses customer email addresses, billing addresses, purchase history, and third-party demographic information; optional newsletter enrichment may return physical addresses to the client for future use. Explain the data flows and intended marketing use described in the SOW, then identify privacy, consent, retention, data-minimization, and vendor-processing questions that the SOW excerpt does not fully answer. Clearly label those as follow-up governance questions rather than asserting undocumented policies or legal conclusions.
+
+41. Cross-document — Compare the five commercial models
+Compare Fana Jewelry's monthly social/paid-social retainer, Hexagon's fixed-fee SEO remediation project, Ethos Pet Brands' spend-tiered media-management fee plus dashboards and optional creative, Forward Storage's monthly SEO floor plus per-additional-location pricing, and Hoffman Media's fixed initial analytics project plus per-record enrichment. For each, identify the unit of pricing, what the fee is tied to, billing or term information available, and the most important caveat when comparing totals across clients. Do not treat media spend paid directly to advertising platforms as identical to agency service fees.
+
+42. Cross-document — Deliverables versus outcomes
+Across all five SOWs, separate concrete deliverables or service activities from business objectives and hoped-for outcomes. Use examples including Fana's content calendar and production assets, Hexagon's findings/sitemap/metadata sheet, Ethos's dashboards and campaign management, Forward Storage's wireframes/playbook and organic-visibility goals, and Hoffman Media's segments/LTV model. Explain how a robust agentic RAG wrapper should answer “What is guaranteed?” without converting objectives such as higher visibility, conversion improvement, or better marketing efficiency into unsupported guarantees.
+
+43. Cross-document — Missing information and abstention test
+For each of the five clients, invent one plausible but unanswerable operational question grounded in the SOW (for example, an exact page-level traffic loss, an actual influencer identity, a precise location-rental cost, a dashboard KPI value, a property's current ranking, or a customer's predicted LTV). For each, explain what the SOW does support, what additional artifact or data source is needed, and how the wrapper should express uncertainty and request the missing evidence rather than fabricate a value.
+
+44. Cross-document — Conflicting cadence resolution
+A user claims that every client receives weekly meetings and monthly reporting because one SOW says so. Compare the actual cadence language in Fana Jewelry, Ethos Pet Brands, Forward Storage, and Hoffman Media, and contrast it with Hexagon's project milestones. Identify the cadence explicitly stated for each document, including Fana's quarterly campaign presentation and at-least-monthly meeting, Ethos's weekly meetings plus monthly business review, Forward Storage's at-least-twice-monthly strategic meetings, and any cadence not specified in the Hoffman excerpt. Explain how retrieval should preserve client-specific context.
+
+45. Cross-document — Term, termination, and renewal comparison
+Compare Fana Jewelry's term end date, automatic 12-month renewal, 90-day notice to avoid renewal, and early-termination clause; Ethos Pet Brands' fixed term through December 31, 2024 followed by month-to-month continuation and 30-day written termination; Forward Storage's six-month initial ongoing SEO term followed by reassessment; and the project-completion terms in Hexagon. Include Hoffman Media's available SOW date/initial project framing only to the extent supported. Explain why a wrapper must not transfer one client's termination rights to another client's agreement.
+
+46. Cross-document — Change-order and out-of-scope detection
+Classify these requests against the five SOWs: adding a fifth Fana paid-social network; buying extra Fana posts or design hours; adding a Hexagon language or increasing 114 URLs to 150; adding an Ethos channel beyond Google/Meta/Bing; adding Forward Storage locations beyond the 22-location base; and refreshing Hoffman segments after the initial analysis. For each request, identify the closest documented rule or price if present, and otherwise state that the SOW does not provide a specific price or approval mechanism. Avoid assuming that similar-looking provisions apply across clients.
+
+47. Cross-document — Evidence provenance and citation discipline
+A user asks the agent to produce a management memo combining all five SOWs. Design a source-grounded answer structure that associates each client fact with the correct document, distinguishes proposal language from executed agreement language where visible, preserves effective dates and client names, and cites the relevant source sections. Explain how to avoid mixing Hexagon's $18,500 fixed project fee with Forward Storage's $6,500 monthly floor, or Ethos's dashboard fee with Fana's retainer. Identify why ambiguous names, effective dates, and amendments should trigger verification rather than silent reconciliation.
+
+48. Cross-document — Multi-hop client scenario
+A senior manager asks: “Which client has a fixed-price SEO remediation project, which client has ongoing local SEO across multiple property locations, which client has a paid-media dashboard arrangement, which client has customer segmentation/LTV modeling, and which client has a social-content production and influencer option? For each, provide one major dependency, one deliverable, one fee rule, and one scope caveat.” Answer by joining information across the five SOWs while preserving exact client-to-service associations and explicitly identifying any requested field not stated in a given document.
+
+49. Cross-document — Contradiction and ambiguity handling
+Suppose a retrieval system returns a statement that “all creative is included” from a broad description, alongside a client-specific clause charging for additional Fana creative, giving Ethos optional creative packages, and limiting revisions to two rounds per creative project. Explain how the agent should resolve apparent tension by prioritizing the specific client and clause context, distinguishing included baseline work from optional/additional work, and preserving the revision rule. Include a second example involving different notice periods across Fana and Ethos, and explain why neither clause should be generalized to all clients.
+
+50. Agentic RAG stress test — Plan, retrieve, calculate, verify, and answer
+A portfolio executive asks for a consolidated action plan across the five clients for the next quarter. The response must identify upcoming workstreams and dependencies, quantify only fees that can be calculated from stated rates, separate agency fees from third-party/media spend, distinguish recurring services from one-time projects, list client approvals/access/data needed, preserve each client's reporting cadence and termination/notice constraints, and call out any missing dates, amendments, or underlying performance data. Describe the sequence of retrieval and verification steps an agentic RAG wrapper should take, the cross-document joins it must perform, the calculations it can safely execute, and the unsupported conclusions it must refuse to invent.

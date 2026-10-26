@@ -264,10 +264,30 @@ def test_supported_kwargs_and_output():
 def test_export_skips_missing_password(tmp_path, monkeypatch):
     from lightrag_wrapper.adapter.embedded import _export_storage_env
 
-    config = make_config(postgres_password=None, neo4j_password=None)
+    config = make_config(
+        postgres_password=None,
+        neo4j_password=None,
+        milvus_user=None,
+        milvus_password=None,
+    )
     monkeypatch.delenv("POSTGRES_PASSWORD", raising=False)
+    monkeypatch.delenv("MILVUS_USER", raising=False)
+    monkeypatch.delenv("MILVUS_PASSWORD", raising=False)
     _export_storage_env(config)
     assert "POSTGRES_PASSWORD" not in __import__("os").environ or True
     # None values are not written; a pre-existing value must remain untouched
     # only when the config value is None. Confirm host is exported.
     assert __import__("os").environ["POSTGRES_HOST"] == config.postgres_host
+    assert "MILVUS_USER" not in __import__("os").environ
+    assert "MILVUS_PASSWORD" not in __import__("os").environ
+
+
+def test_export_milvus_credentials(monkeypatch):
+    from lightrag_wrapper.adapter.embedded import _export_storage_env
+
+    monkeypatch.delenv("MILVUS_USER", raising=False)
+    monkeypatch.delenv("MILVUS_PASSWORD", raising=False)
+    config = make_config(milvus_user="root", milvus_password="secret")
+    _export_storage_env(config)
+    assert __import__("os").environ["MILVUS_USER"] == "root"
+    assert __import__("os").environ["MILVUS_PASSWORD"] == "secret"

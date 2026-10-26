@@ -634,11 +634,13 @@ The executor runs the DAG once, in dependency order. It does not add, remove, or
 
 A node can read only the outputs of the ids in its "depends_on" list. It cannot see any other node. If a later node needs a fact from an earlier node, either list that earlier id in "depends_on", or tell the intermediate node to carry that fact forward in its own output.
 
-Only a "retrieve" node calls LightRAG.
+Only a "retrieve" node calls LightRAG. Every retrieve returns context only, whether or not it is a result. After each context call, the executor judges that context. When the judgment asks for a different search, the executor may repeat LightRAG up to a fixed extra-attempt budget. Those repeats do not add plan nodes. When the budget is spent, or the judgment says to stop, the executor does not search again.
 
-* A root "retrieve" searches its subquery as written.
-* A root "retrieve" with "isResultNode": true is one answering LightRAG query. It is not a context-only retrieval followed by a second query.
-* A dependent "retrieve" first turns its subquery and the parent outputs into one standalone search string, then makes one LightRAG call. That call is context-only when the node is not a result, and an answer when it is.
+* A root "retrieve" searches its subquery as written on the first call.
+* A dependent "retrieve" first turns its subquery and the parent outputs into one standalone search string, then makes its first LightRAG call with that string.
+* A follow-up search uses the query and mode from the judgment. It is still one retrieve node.
+* When the retrieve is a result, the executor then writes one answer from the final context, the subquery, and any parent outputs. That answer is what the node yields.
+* A retrieve that is not a result publishes the final context.
 
 "filter", "transform", "aggregate", "compare", "assemble", "evaluate", and "synthesize" are one LLM operation over the parent outputs and the subquery. That operation's text is the node output. If the node is a result, that text is the user-facing answer. These node types do not call LightRAG, and there is no second LightRAG call after the operation.
 
