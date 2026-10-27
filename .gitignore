@@ -228,3 +228,5 @@ env/
 # Optional Neo4j Bloom / Enterprise license keys
 licenses/*
 !licenses/.gitkeep
+
+data/*

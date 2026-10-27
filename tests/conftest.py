@@ -52,6 +52,8 @@ def make_config(**overrides) -> LightRAGConfig:
         "llm_retry_max_wait": 0.0,
         "llm_retry_strategy": "constant_retry",
         "wrapper_upload_dir": "./data/wrapper/uploads",
+        "save_dag_visual": False,
+        "dag_visual_dir": "./data/query_dags",
         "working_dir": "./data/embedded/rag_storage",
         "postgres_password": "rag",
         "neo4j_password": "neo4j",

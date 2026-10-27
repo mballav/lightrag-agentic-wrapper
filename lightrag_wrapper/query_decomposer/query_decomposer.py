@@ -4,7 +4,10 @@ from __future__ import annotations
 
 import json
 import re
+import threading
+from concurrent.futures import Future, ThreadPoolExecutor
 from dataclasses import dataclass
+from pathlib import Path
 
 from lightrag_wrapper.adapter._catalog import unavailable_catalog
 from lightrag_wrapper.adapter.base import LightRAGAdapter
@@ -12,6 +15,7 @@ from lightrag_wrapper.exceptions import LightRAGAdapterError, LLMServiceError
 from lightrag_wrapper.log import get_logger
 from lightrag_wrapper.llm.service import LLMService
 from lightrag_wrapper.models import QueryPlanNode
+from lightrag_wrapper.query_decomposer.dag_visualizer import DAGVisualizer
 from lightrag_wrapper.query_decomposer.decomposer_prompt import query_decomposer_prompt
 
 logger = get_logger(__name__)
@@ -46,9 +50,21 @@ class Decomposition:
 class QueryDecomposer:
     """Break a user query into a dependency-aware retrieval plan."""
 
-    def __init__(self, llm: LLMService, adapter: LightRAGAdapter) -> None:
+    def __init__(
+        self,
+        llm: LLMService,
+        adapter: LightRAGAdapter,
+        *,
+        save_dag_visual: bool = False,
+        dag_visual_dir: str | Path = "./data/query_dags",
+    ) -> None:
         self._llm = llm
         self._adapter = adapter
+        self._save_dag_visual = save_dag_visual
+        self._dag_visual_dir = dag_visual_dir
+        self._dag_executor: ThreadPoolExecutor | None = None
+        self._dag_saves: set[Future[Path]] = set()
+        self._dag_saves_lock = threading.Lock()
 
     async def decompose(
         self,
@@ -86,7 +102,33 @@ class QueryDecomposer:
             node_count=len(nodes),
             query=cleaned[:120],
         )
+        if self._save_dag_visual:
+            self._schedule_dag_visual(nodes)
         return Decomposition(nodes=nodes, knowledge_base_metadata=metadata)
+
+    def _schedule_dag_visual(self, nodes: list[QueryPlanNode]) -> None:
+        """Draw the plan on one background thread and return without waiting."""
+        if self._dag_executor is None:
+            self._dag_executor = ThreadPoolExecutor(
+                max_workers=1,
+                thread_name_prefix="dag-visual",
+            )
+        future = self._dag_executor.submit(
+            DAGVisualizer(self._dag_visual_dir).save_dag_visual,
+            nodes,
+        )
+        with self._dag_saves_lock:
+            self._dag_saves.add(future)
+        future.add_done_callback(self._finish_dag_save)
+
+    def _finish_dag_save(self, done: Future[Path]) -> None:
+        with self._dag_saves_lock:
+            self._dag_saves.discard(done)
+        error = done.exception()
+        if error is not None:
+            logger.warning("Query DAG visual was not saved", exc_info=error)
+            return
+        logger.info("Saved query DAG visual", path=str(done.result()))
 
     async def _knowledge_base_metadata(self) -> str:
         try:

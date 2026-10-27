@@ -1,5 +1,6 @@
 """Query decomposition into a retrieval DAG."""
 
+from lightrag_wrapper.query_decomposer.dag_visualizer import DAGVisualizer
 from lightrag_wrapper.query_decomposer.query_decomposer import (
     Decomposition,
     QueryDecomposer,
@@ -9,6 +10,7 @@ from lightrag_wrapper.query_decomposer.query_decomposer import (
 )
 
 __all__ = [
+    "DAGVisualizer",
     "Decomposition",
     "QueryDecomposer",
     "initial_retrieve_nodes",

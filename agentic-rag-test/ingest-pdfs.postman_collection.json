@@ -1,0 +1,71 @@
+{
+  "info": {
+    "_postman_id": "b7e4c1a2-6f08-4d3e-9a15-2c8f0e6d4b71",
+    "name": "LightRAG ingest PDFs",
+    "description": "Uploads every PDF in agentic-rag-test. POST /ingest accepts JSON text only, so this request uses POST /ingest/file and repeats the `files` form field once per PDF.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://127.0.0.1:8000"
+    }
+  ],
+  "item": [
+    {
+      "name": "Ingest agentic-rag-test PDFs",
+      "request": {
+        "method": "POST",
+        "header": [],
+        "body": {
+          "mode": "formdata",
+          "formdata": [
+            {
+              "key": "files",
+              "type": "file",
+              "src": "d:/work/docusearch/lightrag-agentic-wrapper/agentic-rag-test/Acadia __ Fana Jewelry_ 2023 SOW_smBpFumKxHXALFrgE66UyH.pdf",
+              "description": "Acadia / Fana Jewelry 2023 SOW"
+            },
+            {
+              "key": "files",
+              "type": "file",
+              "src": "d:/work/docusearch/lightrag-agentic-wrapper/agentic-rag-test/Acadia __ Hexagon_ SEO Post-Launch Remediation SOW_CCpo8eHV4tN83EF3GaWkvf.pdf",
+              "description": "Acadia / Hexagon SEO Post-Launch Remediation SOW"
+            },
+            {
+              "key": "files",
+              "type": "file",
+              "src": "d:/work/docusearch/lightrag-agentic-wrapper/agentic-rag-test/Ethos Pet Brands __ Acadia SOW.pdf",
+              "description": "Ethos Pet Brands / Acadia SOW"
+            },
+            {
+              "key": "files",
+              "type": "file",
+              "src": "d:/work/docusearch/lightrag-agentic-wrapper/agentic-rag-test/Forward Storage x Acadia _ SOW (SEO)_H7WLUUqWHPzCYYKV4vqw3J (1).pdf",
+              "description": "Forward Storage x Acadia SEO SOW"
+            },
+            {
+              "key": "files",
+              "type": "file",
+              "src": "d:/work/docusearch/lightrag-agentic-wrapper/agentic-rag-test/Hoffman Media __ Acadia _ Analytics SOW_Tbwg5vWjSgdSdHFKfdshce.pdf",
+              "description": "Hoffman Media / Acadia Analytics SOW"
+            }
+          ]
+        },
+        "url": {
+          "raw": "{{baseUrl}}/ingest/file?wait=false",
+          "host": ["{{baseUrl}}"],
+          "path": ["ingest", "file"],
+          "query": [
+            {
+              "key": "wait",
+              "value": "true",
+              "description": "Return after the files are accepted. Set to true to wait until indexing finishes."
+            }
+          ]
+        },
+        "description": "Multipart upload of all five PDFs in agentic-rag-test. Each part uses the form field name `files`."
+      }
+    }
+  ]
+}

@@ -184,6 +184,7 @@ class PlanExecutor:
                 **keywords,
             )
             retrieved = result.response
+            logger.debug(f"Retrieved: {retrieved}")
             last_references = list(result.references or [])
             evaluation = await self._evaluator.evaluate(
                 subquery=node.subquery,

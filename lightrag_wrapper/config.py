@@ -154,6 +154,14 @@ class LightRAGConfig(BaseSettings):
         default="./data/wrapper/uploads",
         description="Where the wrapper API stages multipart uploads before ingest.",
     )
+    save_dag_visual: bool = Field(
+        default=False,
+        description="Write a PNG of each query DAG when SAVE_DAG_VISUAL is true.",
+    )
+    dag_visual_dir: str = Field(
+        default="./data/query_dags",
+        description="Directory for saved query DAG images.",
+    )
 
     # --- LightRAG working directories / isolation ---
     working_dir: str = "./data/embedded/rag_storage"

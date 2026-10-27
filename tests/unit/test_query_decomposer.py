@@ -1,8 +1,11 @@
 """Query decomposer prompt filling and DAG parsing."""
 
+import asyncio
 import json
+import threading
 
 from lightrag_wrapper.exceptions import LLMServiceError
+from lightrag_wrapper.query_decomposer.dag_visualizer import DAGVisualizer
 from lightrag_wrapper.query_decomposer.query_decomposer import (
     QueryDecomposer,
     parse_decomposition,
@@ -158,9 +161,86 @@ async def test_decompose_puts_catalog_in_the_prompt():
     assert "18 days" in llm.prompt
 
 
+async def test_decompose_saves_a_dag_only_when_enabled(tmp_path):
+    payload = (
+        '[{"Id": 1, "nodeType": "retrieve", "subquery": "Retrieve the leave policy.",'
+        ' "depends_on": [], "isResultNode": true}]'
+    )
+    off = tmp_path / "off"
+    plan = await QueryDecomposer(
+        _LLM(payload),
+        _CatalogAdapter({"documents": []}),
+        dag_visual_dir=off,
+    ).decompose("How many days?")
+    assert plan is not None
+    assert not off.exists()
+
+    on = tmp_path / "on"
+    decomposer = QueryDecomposer(
+        _LLM(payload),
+        _CatalogAdapter({"documents": []}),
+        save_dag_visual=True,
+        dag_visual_dir=on,
+    )
+    plan = await decomposer.decompose("How many days?")
+    assert plan is not None
+    assert decomposer._dag_executor is not None
+    decomposer._dag_executor.shutdown(wait=True)
+    saved = list(on.glob("query_dag_*.png"))
+    assert len(saved) == 1
+    assert saved[0].read_bytes().startswith(b"\x89PNG")
+
+
+async def test_decompose_returns_before_the_dag_visual_finishes(tmp_path, monkeypatch):
+    started = threading.Event()
+    release = threading.Event()
+
+    def slow_save(self, nodes, directory=None):
+        started.set()
+        assert release.wait(timeout=5)
+        return tmp_path / "query_dag.png"
+
+    monkeypatch.setattr(DAGVisualizer, "save_dag_visual", slow_save)
+    payload = (
+        '[{"Id": 1, "nodeType": "retrieve", "subquery": "Retrieve the leave policy.",'
+        ' "depends_on": [], "isResultNode": true}]'
+    )
+    decomposer = QueryDecomposer(
+        _LLM(payload),
+        _CatalogAdapter({"documents": []}),
+        save_dag_visual=True,
+        dag_visual_dir=tmp_path,
+    )
+    plan = await asyncio.wait_for(decomposer.decompose("How many days?"), timeout=2)
+    assert plan is not None
+    assert started.wait(timeout=2)
+    release.set()
+    assert decomposer._dag_executor is not None
+    decomposer._dag_executor.shutdown(wait=True)
+
+
 async def test_decompose_returns_none_when_the_model_fails():
     decomposer = QueryDecomposer(_LLM(LLMServiceError("down")), _CatalogAdapter({"documents": []}))
     assert await decomposer.decompose("How many days?") is None
+
+
+def test_save_dag_visual_writes_a_timestamped_png(tmp_path):
+    raw = """
+    [
+      {"Id": 1, "nodeType": "retrieve", "subquery": "Find the 2024 policy.", "depends_on": [], "isResultNode": false},
+      {"Id": 2, "nodeType": "retrieve", "subquery": "Find the 2026 policy.", "depends_on": [], "isResultNode": false},
+      {"Id": 3, "nodeType": "compare", "subquery": "Compare the two policies.", "depends_on": [1, 2], "isResultNode": true}
+    ]
+    """
+    nodes = parse_decomposition(raw)
+    assert nodes is not None
+    path = DAGVisualizer().save_dag_visual(nodes, tmp_path)
+    assert path.parent == tmp_path
+    assert path.suffix == ".png"
+    assert path.name.startswith("query_dag_")
+    stamp = path.stem.removeprefix("query_dag_")
+    assert len(stamp) == 22 and stamp[8] == "_" and stamp[15] == "_"
+    assert path.read_bytes().startswith(b"\x89PNG")
 
 
 async def test_decompose_continues_when_the_catalog_cannot_be_loaded():

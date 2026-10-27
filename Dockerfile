@@ -13,9 +13,7 @@ RUN apt-get update \
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY lightrag_wrapper ./lightrag_wrapper
-
-RUN mkdir -p /app/data/rag_storage /app/data/inputs /app/data/wrapper/uploads \
+RUN mkdir -p /app/data/rag_storage /app/data/inputs /app/data/wrapper/uploads /app/data/query_dags /app/data/wrapper/logs \
     && useradd --create-home --uid 1000 app \
     && chown -R app:app /app
 

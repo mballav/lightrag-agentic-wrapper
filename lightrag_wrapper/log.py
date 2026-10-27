@@ -5,9 +5,15 @@ from __future__ import annotations
 import logging
 import logging.config
 import sys
+from pathlib import Path
 from typing import Any
 
 import structlog
+
+_LOG_FILE = Path("/app/data/wrapper/logs/wrapper.log")
+_LOG_MAX_BYTES = 10 * 1024 * 1024
+# The active file plus these rolled files is five files on disk.
+_LOG_BACKUP_COUNT = 4
 
 
 def get_logger(name: str | None = None) -> structlog.stdlib.BoundLogger:
@@ -27,6 +33,8 @@ def configure_logging(level: str = "INFO") -> None:
         wrapper_class=structlog.stdlib.BoundLogger,
         cache_logger_on_first_use=False,
     )
+    _LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
+    _close_configured_handlers()
     logging.config.dictConfig(uvicorn_log_config(resolved))
     logging.captureWarnings(True)
 
@@ -41,6 +49,9 @@ def uvicorn_log_config(level: str = "INFO") -> dict[str, Any]:
             "structured": {
                 "()": _structured_formatter,
             },
+            "file": {
+                "()": _file_formatter,
+            },
         },
         "handlers": {
             "structured": {
@@ -48,25 +59,46 @@ def uvicorn_log_config(level: str = "INFO") -> dict[str, Any]:
                 "formatter": "structured",
                 "stream": "ext://sys.stderr",
             },
+            "file": {
+                "class": "logging.handlers.RotatingFileHandler",
+                "formatter": "file",
+                "filename": str(_LOG_FILE),
+                "maxBytes": _LOG_MAX_BYTES,
+                "backupCount": _LOG_BACKUP_COUNT,
+                "encoding": "utf-8",
+            },
         },
         "loggers": {
             "uvicorn": {
-                "handlers": ["structured"],
+                "handlers": ["structured", "file"],
                 "level": resolved,
                 "propagate": False,
             },
             "uvicorn.error": {"level": resolved},
             "uvicorn.access": {
-                "handlers": ["structured"],
+                "handlers": ["structured", "file"],
                 "level": resolved,
                 "propagate": False,
             },
         },
         "root": {
-            "handlers": ["structured"],
+            "handlers": ["structured", "file"],
             "level": resolved,
         },
     }
+
+
+def _close_configured_handlers() -> None:
+    """Close handlers installed by an earlier ``configure_logging`` call."""
+    seen: set[int] = set()
+    for name in ("", "uvicorn", "uvicorn.access", "uvicorn.error"):
+        logger = logging.getLogger(name)
+        for handler in list(logger.handlers):
+            if id(handler) in seen:
+                continue
+            seen.add(id(handler))
+            handler.close()
+        logger.handlers.clear()
 
 
 def _structured_formatter() -> structlog.stdlib.ProcessorFormatter:
@@ -75,6 +107,17 @@ def _structured_formatter() -> structlog.stdlib.ProcessorFormatter:
         processors=[
             structlog.stdlib.ProcessorFormatter.remove_processors_meta,
             _renderer(),
+        ],
+    )
+
+
+def _file_formatter() -> structlog.stdlib.ProcessorFormatter:
+    """JSON for the log file, including when stderr is a color terminal."""
+    return structlog.stdlib.ProcessorFormatter(
+        foreign_pre_chain=_shared_processors(),
+        processors=[
+            structlog.stdlib.ProcessorFormatter.remove_processors_meta,
+            structlog.processors.JSONRenderer(),
         ],
     )
 

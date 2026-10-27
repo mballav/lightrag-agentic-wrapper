@@ -64,7 +64,12 @@ async def lifespan(app: FastAPI):
     llm = LLMService(config)
     rewriter = QueryRewriter(llm)
     router = QueryModeRouter(llm)
-    decomposer = QueryDecomposer(llm, adapter)
+    decomposer = QueryDecomposer(
+        llm,
+        adapter,
+        save_dag_visual=config.save_dag_visual,
+        dag_visual_dir=config.dag_visual_dir,
+    )
     executor = PlanExecutor(llm, adapter, router)
     logger.info(
         "Starting LightRAG adapter",

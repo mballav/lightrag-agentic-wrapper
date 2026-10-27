@@ -101,6 +101,17 @@ def test_validators_and_properties():
         )
 
 
+def test_save_dag_visual_reads_the_env_var(monkeypatch):
+    monkeypatch.setenv("SAVE_DAG_VISUAL", "true")
+    monkeypatch.setenv("DAG_VISUAL_DIR", "/app/data/query_dags")
+    config = LightRAGConfig(app_env="dev", lightrag_mode="embedded")
+    assert config.save_dag_visual is True
+    assert config.dag_visual_dir == "/app/data/query_dags"
+
+    monkeypatch.setenv("SAVE_DAG_VISUAL", "false")
+    assert LightRAGConfig(app_env="dev", lightrag_mode="embedded").save_dag_visual is False
+
+
 def test_require_embedded_bindings():
     make_config().require_embedded_bindings()
     with pytest.raises(ValueError, match="LLM_BINDING"):

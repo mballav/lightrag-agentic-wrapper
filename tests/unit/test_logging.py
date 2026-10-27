@@ -2,6 +2,7 @@ import json
 import logging
 import sys
 
+import lightrag_wrapper.log as log_module
 from lightrag_wrapper.log import configure_logging, get_logger, uvicorn_log_config
 
 
@@ -47,3 +48,29 @@ def test_unknown_log_level_falls_back_to_info():
     assert config["root"]["level"] == "INFO"
     configure_logging("not-a-level")
     assert logging.getLogger().level == logging.INFO
+
+
+def test_log_config_rolls_the_file_at_ten_megabytes():
+    file_handler = uvicorn_log_config("INFO")["handlers"]["file"]
+    assert file_handler["class"] == "logging.handlers.RotatingFileHandler"
+    assert file_handler["maxBytes"] == 10 * 1024 * 1024
+    assert file_handler["backupCount"] == 4
+    assert uvicorn_log_config("INFO")["root"]["handlers"] == ["structured", "file"]
+
+
+def test_configure_logging_writes_json_to_the_log_file(tmp_path, monkeypatch):
+    monkeypatch.setattr(log_module, "_LOG_FILE", tmp_path / "wrapper.log")
+    configure_logging("INFO")
+    get_logger("lightrag_wrapper.test").info("file_ready", mode="server")
+    for handler in logging.getLogger().handlers:
+        handler.flush()
+    line = next(
+        line
+        for line in (tmp_path / "wrapper.log").read_text(encoding="utf-8").splitlines()
+        if "file_ready" in line
+    )
+    payload = json.loads(line)
+    assert payload["event"] == "file_ready"
+    assert payload["mode"] == "server"
+    for handler in list(logging.getLogger().handlers):
+        handler.close()

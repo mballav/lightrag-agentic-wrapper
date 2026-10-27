@@ -19,6 +19,7 @@
 #   LIGHTRAG_RAG_STORAGE=/path/on/host/server-rag-storage
 #   LIGHTRAG_INPUTS=/path/on/host/server-inputs
 #   WRAPPER_UPLOADS=/path/on/host/wrapper-uploads
+#   QUERY_DAGS=/path/on/host/query-dags
 #   NEO4J_LICENSES=/path/on/host/neo4j-licenses   # optional Bloom license file dir
 version: '3.5'
 
@@ -48,10 +49,14 @@ services:
     environment:
       <<: *container-env
       LIGHTRAG_SERVER_URL: http://lightrag:9621
+      DAG_VISUAL_DIR: /app/data/query_dags
     volumes:
       - ${EMBEDDED_RAG_STORAGE:-./data/embedded/rag_storage}:/app/data/rag_storage
       - ${EMBEDDED_INPUTS:-./data/embedded/inputs}:/app/data/inputs
       - ${WRAPPER_UPLOADS:-./data/wrapper/uploads}:/app/data/wrapper/uploads
+      - ${QUERY_DAGS:-./data/query_dags}:/app/data/query_dags
+      - ${WRAPPER_CODE_FOLDER:-./lightrag_wrapper}:/app/lightrag_wrapper
+      - ${WRAPPER_LOGS:-./data/logs}:/app/data/wrapper/logs
     extra_hosts:
       - "host.docker.internal:host-gateway"
     depends_on:
