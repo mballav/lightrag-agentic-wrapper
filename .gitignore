@@ -229,4 +229,5 @@ env/
 licenses/*
 !licenses/.gitkeep
 
-data/*
+data/**
+data
