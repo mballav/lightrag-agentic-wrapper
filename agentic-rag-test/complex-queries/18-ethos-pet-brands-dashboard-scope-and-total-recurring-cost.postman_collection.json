@@ -1,0 +1,51 @@
+{
+  "info": {
+    "_postman_id": "d8b55914-ad88-5afc-b45f-ccc853b3a71b",
+    "name": "18. Ethos Pet Brands — Dashboard scope and total recurring cost",
+    "description": "POST /query rewrites the question, decomposes it into a DAG, and streams one JSON object per line (application/x-ndjson). Each line is {\"id\", \"response\", \"references\"}.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://127.0.0.1:8000"
+    }
+  ],
+  "item": [
+    {
+      "name": "18. Ethos Pet Brands — Dashboard scope and total recurring cost",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Accept",
+            "value": "application/x-ndjson"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"query\": \"The client wants separate dashboards for Natural Balance and Canidae, with paid-search, paid-social, and Google Analytics integration, daily/weekly/monthly/quarterly views, and both operational and board-level reporting. Explain which of these capabilities are stated in the SOW and calculate the dashboarding fee for one month and twelve months. Then calculate illustrative combined monthly costs at $250,000 and $400,000 media spend when the dashboard fee is added, while clearly separating agency service fees from media payments made directly to Google, Meta, and Bing.\",\n  \"conversation_history\": []\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{baseUrl}}/query",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "query"
+          ]
+        },
+        "description": "query is required. conversation_history is optional; omit it or send [] when there is no prior turn."
+      }
+    }
+  ]
+}

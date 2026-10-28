@@ -1,0 +1,51 @@
+{
+  "info": {
+    "_postman_id": "f265a80c-b7a8-5d98-8c8e-6a4701ca0048",
+    "name": "41. Cross-document — Compare the five commercial models",
+    "description": "POST /query rewrites the question, decomposes it into a DAG, and streams one JSON object per line (application/x-ndjson). Each line is {\"id\", \"response\", \"references\"}.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://127.0.0.1:8000"
+    }
+  ],
+  "item": [
+    {
+      "name": "41. Cross-document — Compare the five commercial models",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Accept",
+            "value": "application/x-ndjson"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"query\": \"Compare Fana Jewelry's monthly social/paid-social retainer, Hexagon's fixed-fee SEO remediation project, Ethos Pet Brands' spend-tiered media-management fee plus dashboards and optional creative, Forward Storage's monthly SEO floor plus per-additional-location pricing, and Hoffman Media's fixed initial analytics project plus per-record enrichment. For each, identify the unit of pricing, what the fee is tied to, billing or term information available, and the most important caveat when comparing totals across clients. Do not treat media spend paid directly to advertising platforms as identical to agency service fees.\",\n  \"conversation_history\": []\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{baseUrl}}/query",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "query"
+          ]
+        },
+        "description": "query is required. conversation_history is optional; omit it or send [] when there is no prior turn."
+      }
+    }
+  ]
+}

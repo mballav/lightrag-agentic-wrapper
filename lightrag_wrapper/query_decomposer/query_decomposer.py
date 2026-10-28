@@ -85,8 +85,7 @@ class QueryDecomposer:
         try:
             raw = await self._llm.complete_prompt(
                 prompt,
-                system_prompt=_SYSTEM_PROMPT,
-                temperature=0,
+                system_prompt=_SYSTEM_PROMPT
             )
         except LLMServiceError as exc:
             logger.warning("Query decomposer LLM call failed", error=str(exc))

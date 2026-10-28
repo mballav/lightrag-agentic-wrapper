@@ -1,0 +1,51 @@
+{
+  "info": {
+    "_postman_id": "58af39a8-cdca-5b7a-ad22-e17a4209f818",
+    "name": "14. Hexagon — Budget and invoicing interpretation",
+    "description": "POST /query rewrites the question, decomposes it into a DAG, and streams one JSON object per line (application/x-ndjson). Each line is {\"id\", \"response\", \"references\"}.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://127.0.0.1:8000"
+    }
+  ],
+  "item": [
+    {
+      "name": "14. Hexagon — Budget and invoicing interpretation",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Accept",
+            "value": "application/x-ndjson"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"query\": \"A finance analyst needs to forecast the Hexagon project's agency fee and invoice timing. State the total rate-schedule amount, the stated invoicing date, and the dependency on client purchase-order direction. Explain the project term and why the document does not provide a per-initiative price allocation that would justify assigning arbitrary portions of the total to the three initiatives.\",\n  \"conversation_history\": []\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{baseUrl}}/query",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "query"
+          ]
+        },
+        "description": "query is required. conversation_history is optional; omit it or send [] when there is no prior turn."
+      }
+    }
+  ]
+}

@@ -1,0 +1,51 @@
+{
+  "info": {
+    "_postman_id": "fe62bdbd-2a7d-5844-b7f4-cd9eb3b4e582",
+    "name": "03. Fana Jewelry — Paid-social channel expansion",
+    "description": "POST /query rewrites the question, decomposes it into a DAG, and streams one JSON object per line (application/x-ndjson). Each line is {\"id\", \"response\", \"references\"}.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://127.0.0.1:8000"
+    }
+  ],
+  "item": [
+    {
+      "name": "03. Fana Jewelry — Paid-social channel expansion",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Accept",
+            "value": "application/x-ndjson"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"query\": \"The client asks Acadia to add a fifth paid-social network to the listed Facebook, Instagram, Pinterest, and TikTok mix. Explain the contractual route required for expansion, the additional monthly investment stated for each additional network, and how this differs from the SOW's existing monthly paid-social management fee. Identify which creative assets are included monthly, which asset sources are expected to be used, and why custom photography or videography should not be assumed to be included at no extra cost.\",\n  \"conversation_history\": []\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{baseUrl}}/query",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "query"
+          ]
+        },
+        "description": "query is required. conversation_history is optional; omit it or send [] when there is no prior turn."
+      }
+    }
+  ]
+}

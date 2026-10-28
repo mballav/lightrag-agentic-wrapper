@@ -1,0 +1,51 @@
+{
+  "info": {
+    "_postman_id": "3bd91b3f-52ff-5770-a4a5-2e02f1c91495",
+    "name": "34. Hoffman Media — Data prerequisites and sequencing",
+    "description": "POST /query rewrites the question, decomposes it into a DAG, and streams one JSON object per line (application/x-ndjson). Each line is {\"id\", \"response\", \"references\"}.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://127.0.0.1:8000"
+    }
+  ],
+  "item": [
+    {
+      "name": "34. Hoffman Media — Data prerequisites and sequencing",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Accept",
+            "value": "application/x-ndjson"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"query\": \"A client has email addresses for newsletter subscribers but lacks physical addresses and purchase history for some records. Explain the distinction between the core segmentation model's stated inputs—email address, billing address, and purchase history—and the optional subscriber-enrichment process that first appends physical addresses before household demographic data. Describe the discovery/review of first-party data sources and centralized-warehouse opportunity, and identify which gaps could affect completeness without inventing a guaranteed match rate.\",\n  \"conversation_history\": []\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{baseUrl}}/query",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "query"
+          ]
+        },
+        "description": "query is required. conversation_history is optional; omit it or send [] when there is no prior turn."
+      }
+    }
+  ]
+}

@@ -68,7 +68,6 @@ class QueryModeRouter:
                 cleaned,
                 system_prompt=_SYSTEM_PROMPT,
                 response_format={"type": "json_object"},
-                temperature=0,
             )
         except LLMServiceError as exc:
             logger.warning(

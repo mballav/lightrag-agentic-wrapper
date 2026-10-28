@@ -1,0 +1,51 @@
+{
+  "info": {
+    "_postman_id": "d19eafe1-c299-522f-b629-ac3024144ef2",
+    "name": "31. Hoffman Media — Segmentation pipeline end to end",
+    "description": "POST /query rewrites the question, decomposes it into a DAG, and streams one JSON object per line (application/x-ndjson). Each line is {\"id\", \"response\", \"references\"}.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://127.0.0.1:8000"
+    }
+  ],
+  "item": [
+    {
+      "name": "31. Hoffman Media — Segmentation pipeline end to end",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Accept",
+            "value": "application/x-ndjson"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"query\": \"Using the Hoffman Media SOW, explain the planned customer-segmentation workflow from first-party data ingestion through cleaning, third-party demographic enrichment, segment analysis, and exportable audiences for marketing channels. Identify the listed first-party fields, explain the intended use of high-, mid-, and low-LTV segments, and describe the integration of updated segmentation and LTV values into campaign segmentation, creative production, and conversion-value modeling. Do not claim the model has already been built or validated merely because the SOW describes it.\",\n  \"conversation_history\": []\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{baseUrl}}/query",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "query"
+          ]
+        },
+        "description": "query is required. conversation_history is optional; omit it or send [] when there is no prior turn."
+      }
+    }
+  ]
+}

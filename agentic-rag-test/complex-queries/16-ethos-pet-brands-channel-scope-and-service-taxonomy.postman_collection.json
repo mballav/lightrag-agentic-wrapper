@@ -1,0 +1,51 @@
+{
+  "info": {
+    "_postman_id": "d0e2f835-0a2d-593a-b516-853866d6336d",
+    "name": "16. Ethos Pet Brands — Channel scope and service taxonomy",
+    "description": "POST /query rewrites the question, decomposes it into a DAG, and streams one JSON object per line (application/x-ndjson). Each line is {\"id\", \"response\", \"references\"}.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://127.0.0.1:8000"
+    }
+  ],
+  "item": [
+    {
+      "name": "16. Ethos Pet Brands — Channel scope and service taxonomy",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Accept",
+            "value": "application/x-ndjson"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"query\": \"Using the Ethos Pet Brands SOW effective February 1, 2024, distinguish the paid-media channels listed from the services included in full-service media management. Explain the roles of paid search, paid social, optimization, demographic and keyword selection, landing-page recommendations, remarketing, text-ad optimization, local advertising, creative-agency coordination, and quarterly full-agency-counsel coordination. State how expansion to additional channels is treated and do not infer an unstated expansion price.\",\n  \"conversation_history\": []\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{baseUrl}}/query",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "query"
+          ]
+        },
+        "description": "query is required. conversation_history is optional; omit it or send [] when there is no prior turn."
+      }
+    }
+  ]
+}

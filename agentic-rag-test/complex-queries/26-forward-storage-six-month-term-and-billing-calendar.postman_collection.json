@@ -1,0 +1,51 @@
+{
+  "info": {
+    "_postman_id": "f6d21492-38ae-5fa2-89a7-54ebaa6e4b84",
+    "name": "26. Forward Storage — Six-month term and billing calendar",
+    "description": "POST /query rewrites the question, decomposes it into a DAG, and streams one JSON object per line (application/x-ndjson). Each line is {\"id\", \"response\", \"references\"}.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://127.0.0.1:8000"
+    }
+  ],
+  "item": [
+    {
+      "name": "26. Forward Storage — Six-month term and billing calendar",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Accept",
+            "value": "application/x-ndjson"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"query\": \"The SOW is dated April 8, 2024, states prorated billing for April, and begins monthly retainer billing on May 1, 2024. The initial ongoing SEO term is six months followed by reassessment. Build a careful timeline that distinguishes the effective date, April proration, monthly billing start, initial six-month commitment, and later renegotiation. If calculating a total for the six-month period, state assumptions about which months are included and do not fabricate the prorated April amount because no proration formula is supplied.\",\n  \"conversation_history\": []\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{baseUrl}}/query",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "query"
+          ]
+        },
+        "description": "query is required. conversation_history is optional; omit it or send [] when there is no prior turn."
+      }
+    }
+  ]
+}

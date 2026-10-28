@@ -1,0 +1,51 @@
+{
+  "info": {
+    "_postman_id": "47cf154f-3775-57a7-92ad-2e93253c6908",
+    "name": "35. Hoffman Media — Initial analysis versus ongoing refresh",
+    "description": "POST /query rewrites the question, decomposes it into a DAG, and streams one JSON object per line (application/x-ndjson). Each line is {\"id\", \"response\", \"references\"}.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://127.0.0.1:8000"
+    }
+  ],
+  "item": [
+    {
+      "name": "35. Hoffman Media — Initial analysis versus ongoing refresh",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Accept",
+            "value": "application/x-ndjson"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"query\": \"The client assumes customer segments will be refreshed every month because the service is called “managed.” Interpret the SOW's statement that Acadia provides an initial analysis and the client may opt to refresh segments later as additional scope. Explain what is included in the initial effort, what requires an optional later decision, and how the wrapper should answer questions about refresh cadence, refresh price, or continuing maintenance when those details are not specified.\",\n  \"conversation_history\": []\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{baseUrl}}/query",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "query"
+          ]
+        },
+        "description": "query is required. conversation_history is optional; omit it or send [] when there is no prior turn."
+      }
+    }
+  ]
+}

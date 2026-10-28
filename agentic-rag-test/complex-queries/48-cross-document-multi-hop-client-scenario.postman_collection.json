@@ -1,0 +1,51 @@
+{
+  "info": {
+    "_postman_id": "d1916c7b-b779-5458-bac9-b07d151244c1",
+    "name": "48. Cross-document — Multi-hop client scenario",
+    "description": "POST /query rewrites the question, decomposes it into a DAG, and streams one JSON object per line (application/x-ndjson). Each line is {\"id\", \"response\", \"references\"}.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://127.0.0.1:8000"
+    }
+  ],
+  "item": [
+    {
+      "name": "48. Cross-document — Multi-hop client scenario",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Accept",
+            "value": "application/x-ndjson"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"query\": \"A senior manager asks: “Which client has a fixed-price SEO remediation project, which client has ongoing local SEO across multiple property locations, which client has a paid-media dashboard arrangement, which client has customer segmentation/LTV modeling, and which client has a social-content production and influencer option? For each, provide one major dependency, one deliverable, one fee rule, and one scope caveat.” Answer by joining information across the five SOWs while preserving exact client-to-service associations and explicitly identifying any requested field not stated in a given document.\",\n  \"conversation_history\": []\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{baseUrl}}/query",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "query"
+          ]
+        },
+        "description": "query is required. conversation_history is optional; omit it or send [] when there is no prior turn."
+      }
+    }
+  ]
+}

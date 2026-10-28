@@ -53,7 +53,6 @@ class QueryRewriter:
                 user_prompt,
                 system_prompt=SYSTEM_PROMPT,
                 response_format={"type": "json_object"},
-                temperature=0,
             )
         except LLMServiceError as exc:
             logger.warning(

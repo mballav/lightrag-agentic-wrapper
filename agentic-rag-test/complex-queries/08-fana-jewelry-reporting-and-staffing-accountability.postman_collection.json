@@ -1,0 +1,51 @@
+{
+  "info": {
+    "_postman_id": "999039e8-1155-5653-9ce3-cdf0bbf65a76",
+    "name": "08. Fana Jewelry — Reporting and staffing accountability",
+    "description": "POST /query rewrites the question, decomposes it into a DAG, and streams one JSON object per line (application/x-ndjson). Each line is {\"id\", \"response\", \"references\"}.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://127.0.0.1:8000"
+    }
+  ],
+  "item": [
+    {
+      "name": "08. Fana Jewelry — Reporting and staffing accountability",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Accept",
+            "value": "application/x-ndjson"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"query\": \"A client executive says that quarterly campaign presentations mean Acadia only needs to meet quarterly. Use the SOW to assess this claim, distinguishing monthly formal reporting and at-least-monthly strategic meetings from quarterly campaign presentations and strategy meetings. Name the account-team roles listed and explain how the stated reporting layers serve different purposes without assuming unlisted service-level guarantees.\",\n  \"conversation_history\": []\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{baseUrl}}/query",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "query"
+          ]
+        },
+        "description": "query is required. conversation_history is optional; omit it or send [] when there is no prior turn."
+      }
+    }
+  ]
+}

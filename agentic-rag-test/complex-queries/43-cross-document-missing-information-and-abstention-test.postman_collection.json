@@ -1,0 +1,51 @@
+{
+  "info": {
+    "_postman_id": "a13e4a20-54ca-5bf0-9b26-705ffe3f3bb5",
+    "name": "43. Cross-document — Missing information and abstention test",
+    "description": "POST /query rewrites the question, decomposes it into a DAG, and streams one JSON object per line (application/x-ndjson). Each line is {\"id\", \"response\", \"references\"}.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://127.0.0.1:8000"
+    }
+  ],
+  "item": [
+    {
+      "name": "43. Cross-document — Missing information and abstention test",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Accept",
+            "value": "application/x-ndjson"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"query\": \"For each of the five clients, invent one plausible but unanswerable operational question grounded in the SOW (for example, an exact page-level traffic loss, an actual influencer identity, a precise location-rental cost, a dashboard KPI value, a property's current ranking, or a customer's predicted LTV). For each, explain what the SOW does support, what additional artifact or data source is needed, and how the wrapper should express uncertainty and request the missing evidence rather than fabricate a value.\",\n  \"conversation_history\": []\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{baseUrl}}/query",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "query"
+          ]
+        },
+        "description": "query is required. conversation_history is optional; omit it or send [] when there is no prior turn."
+      }
+    }
+  ]
+}

@@ -1,0 +1,51 @@
+{
+  "info": {
+    "_postman_id": "de40055e-e896-5c58-8981-77c77087e18f",
+    "name": "33. Hoffman Media — Fee calculations for demographic appending",
+    "description": "POST /query rewrites the question, decomposes it into a DAG, and streams one JSON object per line (application/x-ndjson). Each line is {\"id\", \"response\", \"references\"}.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://127.0.0.1:8000"
+    }
+  ],
+  "item": [
+    {
+      "name": "33. Hoffman Media — Fee calculations for demographic appending",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Accept",
+            "value": "application/x-ndjson"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"query\": \"The initial segmentation and LTV effort is priced at $27,500. Separately, appending physical addresses to newsletter subscriber records is priced at $0.07 per record appended, with the workflow first appending a physical address and then household demographic data. Calculate the address-append fee for 10,000, 50,000, and 100,000 records, and calculate the combined initial effort plus each scenario's append fee. Explain why the per-record fee should not be misrepresented as an all-inclusive price for every downstream service unless the document supports that interpretation.\",\n  \"conversation_history\": []\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{baseUrl}}/query",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "query"
+          ]
+        },
+        "description": "query is required. conversation_history is optional; omit it or send [] when there is no prior turn."
+      }
+    }
+  ]
+}

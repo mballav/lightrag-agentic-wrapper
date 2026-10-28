@@ -1,0 +1,51 @@
+{
+  "info": {
+    "_postman_id": "1ffc8328-b783-5bb0-a9ca-84337ebf607f",
+    "name": "30. Forward Storage — Combined deliverables and acceptance narrative",
+    "description": "POST /query rewrites the question, decomposes it into a DAG, and streams one JSON object per line (application/x-ndjson). Each line is {\"id\", \"response\", \"references\"}.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://127.0.0.1:8000"
+    }
+  ],
+  "item": [
+    {
+      "name": "30. Forward Storage — Combined deliverables and acceptance narrative",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Accept",
+            "value": "application/x-ndjson"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"query\": \"Prepare an acceptance-oriented summary of the initial audit and ongoing-growth scope. Include competitive research in selected markets, location-page wireframes and SEO specifications, standalone-site best-practice analysis, up to three page templates, revision allowances, the strategic playbook's content/UX, technical, and off-site SEO areas, shared services for 22 locations, monthly reporting, and at-least-twice-monthly meetings. Separate concrete deliverables from goals and recurring services, and flag any acceptance criteria not expressly specified.\",\n  \"conversation_history\": []\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{baseUrl}}/query",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "query"
+          ]
+        },
+        "description": "query is required. conversation_history is optional; omit it or send [] when there is no prior turn."
+      }
+    }
+  ]
+}

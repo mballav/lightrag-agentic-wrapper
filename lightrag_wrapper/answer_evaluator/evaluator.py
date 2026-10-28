@@ -81,7 +81,6 @@ class AnswerEvaluator:
             raw = await self._llm.complete_prompt(
                 prompt,
                 system_prompt=SYSTEM_PROMPT,
-                temperature=0,
                 response_format={"type": "json_object"},
             )
         except LLMServiceError as exc:

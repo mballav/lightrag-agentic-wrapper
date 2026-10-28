@@ -1,0 +1,51 @@
+{
+  "info": {
+    "_postman_id": "92c231ed-b65f-5de2-8bfc-7299cbd8d415",
+    "name": "02. Fana Jewelry — Production calendar and deliverable arithmetic",
+    "description": "POST /query rewrites the question, decomposes it into a DAG, and streams one JSON object per line (application/x-ndjson). Each line is {\"id\", \"response\", \"references\"}.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://127.0.0.1:8000"
+    }
+  ],
+  "item": [
+    {
+      "name": "02. Fana Jewelry — Production calendar and deliverable arithmetic",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Accept",
+            "value": "application/x-ndjson"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"query\": \"Fana wants to plan a 12-month content calendar using the SOW's quarterly production commitments. Calculate the nominal annual number of static photography shoots and TikTok/Reels shoots, and the typical annual ranges of photo assets and video assets implied by the stated per-shoot quantities. Explain why these are planning estimates rather than guaranteed exact annual totals, and include the requirement for advance scheduling and the stated deadline for creating a shared photo stream.\",\n  \"conversation_history\": []\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{baseUrl}}/query",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "query"
+          ]
+        },
+        "description": "query is required. conversation_history is optional; omit it or send [] when there is no prior turn."
+      }
+    }
+  ]
+}

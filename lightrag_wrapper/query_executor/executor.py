@@ -167,6 +167,7 @@ class PlanExecutor:
         if parents:
             search = await self._resolve_search(node, parents)
         mode = await self._router.route(search)
+        logger.debug(f"Router mode: {mode}")
         attempts: list[RetrievalAttempt] = []
         retrieved = ""
         last_references: list[Reference] = []
@@ -174,6 +175,11 @@ class PlanExecutor:
         extra_used = 0
         while True:
             keywords = _search_keywords(context, root=not parents, first_search=not attempts)
+            logger.debug(f"Keywords: {keywords}")
+            logger.debug(f"Subquery: {node.subquery}")
+            logger.debug(f"Context: {context}")
+            logger.debug(f"Parents: {parents}")
+            logger.debug(f"Node: {node}")
             result = await self._adapter.query(
                 search,
                 mode=mode,
@@ -239,7 +245,6 @@ class PlanExecutor:
         raw = await self._llm.complete_prompt(
             prompt,
             system_prompt=_RESOLVE_SYSTEM_PROMPT,
-            temperature=0,
         )
         resolved = _as_text(raw).strip().strip('"')
         return resolved or node.subquery
@@ -258,7 +263,6 @@ class PlanExecutor:
         raw = await self._llm.complete_prompt(
             prompt,
             system_prompt=_SYNTHESIZE_SYSTEM_PROMPT,
-            temperature=0,
         )
         return _as_text(raw).strip()
 
@@ -276,7 +280,6 @@ class PlanExecutor:
         raw = await self._llm.complete_prompt(
             prompt,
             system_prompt=_REASON_SYSTEM_PROMPT,
-            temperature=0,
         )
         return NodeArtifact(
             node_id=node.id,

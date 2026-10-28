@@ -1,0 +1,51 @@
+{
+  "info": {
+    "_postman_id": "22154658-4f75-5017-b6ce-5a1ca3253198",
+    "name": "38. Hoffman Media — Physical, network, and environmental safeguards",
+    "description": "POST /query rewrites the question, decomposes it into a DAG, and streams one JSON object per line (application/x-ndjson). Each line is {\"id\", \"response\", \"references\"}.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://127.0.0.1:8000"
+    }
+  ],
+  "item": [
+    {
+      "name": "38. Hoffman Media — Physical, network, and environmental safeguards",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Accept",
+            "value": "application/x-ndjson"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"query\": \"Construct a security-control inventory from Appendix A covering third-party data-center management and annual SOC 2 Type 2 certification, card-key/keypad access, monitored surveillance, management approval for physical entry, temperature and humidity monitoring, fire detection/suppression, corporate office access, 24/7 Network Operations Center, firewall policy enforcement, IPS/firewalls/DMZ, antivirus and email scanning, and production/non-production segregation. Distinguish controls expressly described from any conclusion about their effectiveness or incident-free operation, which the SOW does not establish.\",\n  \"conversation_history\": []\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{baseUrl}}/query",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "query"
+          ]
+        },
+        "description": "query is required. conversation_history is optional; omit it or send [] when there is no prior turn."
+      }
+    }
+  ]
+}

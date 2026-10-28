@@ -1,0 +1,51 @@
+{
+  "info": {
+    "_postman_id": "423bbffe-81b3-5199-a6d8-62354f264f61",
+    "name": "40. Hoffman Media — Data privacy and sensitive enrichment",
+    "description": "POST /query rewrites the question, decomposes it into a DAG, and streams one JSON object per line (application/x-ndjson). Each line is {\"id\", \"response\", \"references\"}.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://127.0.0.1:8000"
+    }
+  ],
+  "item": [
+    {
+      "name": "40. Hoffman Media — Data privacy and sensitive enrichment",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Accept",
+            "value": "application/x-ndjson"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"query\": \"The segmentation model uses customer email addresses, billing addresses, purchase history, and third-party demographic information; optional newsletter enrichment may return physical addresses to the client for future use. Explain the data flows and intended marketing use described in the SOW, then identify privacy, consent, retention, data-minimization, and vendor-processing questions that the SOW excerpt does not fully answer. Clearly label those as follow-up governance questions rather than asserting undocumented policies or legal conclusions.\",\n  \"conversation_history\": []\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{baseUrl}}/query",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "query"
+          ]
+        },
+        "description": "query is required. conversation_history is optional; omit it or send [] when there is no prior turn."
+      }
+    }
+  ]
+}

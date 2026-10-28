@@ -1,0 +1,51 @@
+{
+  "info": {
+    "_postman_id": "8f056490-8066-5702-8141-a730105f7cf3",
+    "name": "42. Cross-document — Deliverables versus outcomes",
+    "description": "POST /query rewrites the question, decomposes it into a DAG, and streams one JSON object per line (application/x-ndjson). Each line is {\"id\", \"response\", \"references\"}.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://127.0.0.1:8000"
+    }
+  ],
+  "item": [
+    {
+      "name": "42. Cross-document — Deliverables versus outcomes",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Accept",
+            "value": "application/x-ndjson"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"query\": \"Across all five SOWs, separate concrete deliverables or service activities from business objectives and hoped-for outcomes. Use examples including Fana's content calendar and production assets, Hexagon's findings/sitemap/metadata sheet, Ethos's dashboards and campaign management, Forward Storage's wireframes/playbook and organic-visibility goals, and Hoffman Media's segments/LTV model. Explain how a robust agentic RAG wrapper should answer “What is guaranteed?” without converting objectives such as higher visibility, conversion improvement, or better marketing efficiency into unsupported guarantees.\",\n  \"conversation_history\": []\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{baseUrl}}/query",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "query"
+          ]
+        },
+        "description": "query is required. conversation_history is optional; omit it or send [] when there is no prior turn."
+      }
+    }
+  ]
+}

@@ -1,0 +1,51 @@
+{
+  "info": {
+    "_postman_id": "1cf6217f-b5bf-5259-9cfa-07bcf8891a5b",
+    "name": "05. Fana Jewelry — Influencer campaign feasibility",
+    "description": "POST /query rewrites the question, decomposes it into a DAG, and streams one JSON object per line (application/x-ndjson). Each line is {\"id\", \"response\", \"references\"}.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://127.0.0.1:8000"
+    }
+  ],
+  "item": [
+    {
+      "name": "05. Fana Jewelry — Influencer campaign feasibility",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Accept",
+            "value": "application/x-ndjson"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"query\": \"A stakeholder proposes a one-month influencer campaign with a $3,000 paid partnership budget and asks Acadia to select creators, negotiate, execute the campaign, and report KPIs. Compare the request with the SOW's influencer-management requirements, including the management fee, minimum campaign duration, minimum paid-partnership budget, and the explicit exclusions around product payment and shipment. Identify each mismatch and calculate the minimum stated management-fee commitment and minimum dedicated paid-influencer budget for a compliant campaign.\",\n  \"conversation_history\": []\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{baseUrl}}/query",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "query"
+          ]
+        },
+        "description": "query is required. conversation_history is optional; omit it or send [] when there is no prior turn."
+      }
+    }
+  ]
+}

@@ -1,0 +1,51 @@
+{
+  "info": {
+    "_postman_id": "6a5a91e8-cef1-5e37-8cde-b836a1d26753",
+    "name": "23. Forward Storage — Multi-property SEO architecture",
+    "description": "POST /query rewrites the question, decomposes it into a DAG, and streams one JSON object per line (application/x-ndjson). Each line is {\"id\", \"response\", \"references\"}.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://127.0.0.1:8000"
+    }
+  ],
+  "item": [
+    {
+      "name": "23. Forward Storage — Multi-property SEO architecture",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Accept",
+            "value": "application/x-ndjson"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"query\": \"Design a source-grounded SEO approach for Forward Storage's portfolio that separates corporate location pages from individual standalone property websites. Explain the purpose of competitive research, Adobe XD wireframes with SEO specifications, the location-page template and standalone-property template work, the strategic SEO playbook, and the concurrent support model for 22 locations. Describe how the scope supports scalable local visibility without promising specific rankings or traffic outcomes that the SOW does not guarantee.\",\n  \"conversation_history\": []\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{baseUrl}}/query",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "query"
+          ]
+        },
+        "description": "query is required. conversation_history is optional; omit it or send [] when there is no prior turn."
+      }
+    }
+  ]
+}

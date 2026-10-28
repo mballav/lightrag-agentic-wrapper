@@ -1,0 +1,51 @@
+{
+  "info": {
+    "_postman_id": "07c95f7e-0041-542e-a7aa-37819995b103",
+    "name": "22. Ethos Pet Brands — Contract dates and renewal status",
+    "description": "POST /query rewrites the question, decomposes it into a DAG, and streams one JSON object per line (application/x-ndjson). Each line is {\"id\", \"response\", \"references\"}.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://127.0.0.1:8000"
+    }
+  ],
+  "item": [
+    {
+      "name": "22. Ethos Pet Brands — Contract dates and renewal status",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Accept",
+            "value": "application/x-ndjson"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"query\": \"Explain the SOW's effective date, stated term end date of December 31, 2024, month-to-month continuation thereafter until termination, and either party's right to terminate on 30 days' written notice. If asked whether the contract is still active on a later date, explain why the SOW alone establishes the contractual continuation mechanism but does not prove whether a later termination notice, amendment, or replacement agreement occurred.\",\n  \"conversation_history\": []\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{baseUrl}}/query",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "query"
+          ]
+        },
+        "description": "query is required. conversation_history is optional; omit it or send [] when there is no prior turn."
+      }
+    }
+  ]
+}

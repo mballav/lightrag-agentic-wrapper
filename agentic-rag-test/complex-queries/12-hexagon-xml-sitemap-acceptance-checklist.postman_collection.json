@@ -1,0 +1,51 @@
+{
+  "info": {
+    "_postman_id": "5a01e633-a7ee-5343-bca3-b6b2c33f07fb",
+    "name": "12. Hexagon — XML sitemap acceptance checklist",
+    "description": "POST /query rewrites the question, decomposes it into a DAG, and streams one JSON object per line (application/x-ndjson). Each line is {\"id\", \"response\", \"references\"}.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://127.0.0.1:8000"
+    }
+  ],
+  "item": [
+    {
+      "name": "12. Hexagon — XML sitemap acceptance checklist",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Accept",
+            "value": "application/x-ndjson"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"query\": \"The client supplies Google Search Console admin access for hexagon.com but has not yet supplied the URL list to include in the XML sitemap. Explain why one prerequisite is met but the other remains outstanding. Build an acceptance checklist from the SOW's named deliverables: presentation, spreadsheet of remediation recommendations, and optimized XML sitemap. Avoid adding technical acceptance criteria that are not stated in the document; label any proposed criteria as suggestions rather than contractual requirements.\",\n  \"conversation_history\": []\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{baseUrl}}/query",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "query"
+          ]
+        },
+        "description": "query is required. conversation_history is optional; omit it or send [] when there is no prior turn."
+      }
+    }
+  ]
+}

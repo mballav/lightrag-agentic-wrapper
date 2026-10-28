@@ -1,0 +1,51 @@
+{
+  "info": {
+    "_postman_id": "a4591956-2321-5d8f-a2d6-f4c519f62f20",
+    "name": "32. Hoffman Media — LTV model outputs and decision support",
+    "description": "POST /query rewrites the question, decomposes it into a DAG, and streams one JSON object per line (application/x-ndjson). Each line is {\"id\", \"response\", \"references\"}.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://127.0.0.1:8000"
+    }
+  ],
+  "item": [
+    {
+      "name": "32. Hoffman Media — LTV model outputs and decision support",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Accept",
+            "value": "application/x-ndjson"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"query\": \"Hoffman Media wants to forecast customer lifetime value overall and by segment. Explain exactly what the SOW commits to regarding LTV-model development and forecasting, and how higher-LTV segments may support retention and lookalike audience expansion while mid-to-low-LTV segments may be optimized to raise LTV or managed to keep acquisition cost proportional to revenue value. Identify what the SOW does not define—such as the exact model formula, forecast horizon, validation metric, or guaranteed performance lift—and what would need separate agreement or evidence.\",\n  \"conversation_history\": []\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{baseUrl}}/query",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "query"
+          ]
+        },
+        "description": "query is required. conversation_history is optional; omit it or send [] when there is no prior turn."
+      }
+    }
+  ]
+}

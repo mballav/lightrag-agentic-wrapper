@@ -1,0 +1,51 @@
+{
+  "info": {
+    "_postman_id": "53a2c909-43e3-546f-846a-c6927753cf64",
+    "name": "39. Hoffman Media — Personnel security and change management",
+    "description": "POST /query rewrites the question, decomposes it into a DAG, and streams one JSON object per line (application/x-ndjson). Each line is {\"id\", \"response\", \"references\"}.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://127.0.0.1:8000"
+    }
+  ],
+  "item": [
+    {
+      "name": "39. Hoffman Media — Personnel security and change management",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Accept",
+            "value": "application/x-ndjson"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"query\": \"A vendor-risk questionnaire asks how personnel and production changes are controlled. Summarize the stated pre-hire background checks for personnel accessing the Data Platform, employee and contractor NDAs, annual security-awareness training, code-of-business-conduct training, documented configuration hardening, approval before production software installation, and documented change-control workflow with risk-based notifications and approvals. Explain which items apply specifically to personnel accessing the platform and why the SOW should not be paraphrased as guaranteeing zero insider risk.\",\n  \"conversation_history\": []\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{baseUrl}}/query",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "query"
+          ]
+        },
+        "description": "query is required. conversation_history is optional; omit it or send [] when there is no prior turn."
+      }
+    }
+  ]
+}

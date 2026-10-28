@@ -1,0 +1,51 @@
+{
+  "info": {
+    "_postman_id": "ee271409-b989-5140-9a67-00620471375d",
+    "name": "27. Forward Storage — Scope flexibility and prioritization",
+    "description": "POST /query rewrites the question, decomposes it into a DAG, and streams one JSON object per line (application/x-ndjson). Each line is {\"id\", \"response\", \"references\"}.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://127.0.0.1:8000"
+    }
+  ],
+  "item": [
+    {
+      "name": "27. Forward Storage — Scope flexibility and prioritization",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Accept",
+            "value": "application/x-ndjson"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"query\": \"Forward Storage asks Acadia to rotate effort among corporate location pages and individual in-market property sites as needs change, while keeping support for 22 locations concurrent. Explain what flexibility the SOW expressly allows, what remains a concurrent commitment, how the $230 per-location pro-rata fee applies to additional existing properties, and what the SOW does not specify about exact hours or equal effort per location. Recommend what must be clarified before the client interprets “flexibly within budget restraints” as unlimited work.\",\n  \"conversation_history\": []\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{baseUrl}}/query",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "query"
+          ]
+        },
+        "description": "query is required. conversation_history is optional; omit it or send [] when there is no prior turn."
+      }
+    }
+  ]
+}

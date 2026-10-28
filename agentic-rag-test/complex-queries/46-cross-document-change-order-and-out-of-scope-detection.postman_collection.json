@@ -1,0 +1,51 @@
+{
+  "info": {
+    "_postman_id": "a5d7b35a-efa3-583d-9525-25a481cb6c54",
+    "name": "46. Cross-document — Change-order and out-of-scope detection",
+    "description": "POST /query rewrites the question, decomposes it into a DAG, and streams one JSON object per line (application/x-ndjson). Each line is {\"id\", \"response\", \"references\"}.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://127.0.0.1:8000"
+    }
+  ],
+  "item": [
+    {
+      "name": "46. Cross-document — Change-order and out-of-scope detection",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Accept",
+            "value": "application/x-ndjson"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"query\": \"Classify these requests against the five SOWs: adding a fifth Fana paid-social network; buying extra Fana posts or design hours; adding a Hexagon language or increasing 114 URLs to 150; adding an Ethos channel beyond Google/Meta/Bing; adding Forward Storage locations beyond the 22-location base; and refreshing Hoffman segments after the initial analysis. For each request, identify the closest documented rule or price if present, and otherwise state that the SOW does not provide a specific price or approval mechanism. Avoid assuming that similar-looking provisions apply across clients.\",\n  \"conversation_history\": []\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{baseUrl}}/query",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "query"
+          ]
+        },
+        "description": "query is required. conversation_history is optional; omit it or send [] when there is no prior turn."
+      }
+    }
+  ]
+}

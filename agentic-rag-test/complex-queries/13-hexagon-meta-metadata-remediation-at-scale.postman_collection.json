@@ -1,0 +1,51 @@
+{
+  "info": {
+    "_postman_id": "871fef60-9d4b-5cc5-aea7-bcc8c3835407",
+    "name": "13. Hexagon — Meta metadata remediation at scale",
+    "description": "POST /query rewrites the question, decomposes it into a DAG, and streams one JSON object per line (application/x-ndjson). Each line is {\"id\", \"response\", \"references\"}.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://127.0.0.1:8000"
+    }
+  ],
+  "item": [
+    {
+      "name": "13. Hexagon — Meta metadata remediation at scale",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Accept",
+            "value": "application/x-ndjson"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"query\": \"Hexagon confirms 114 English-language URLs and supplies supporting documentation for metadata. Describe the SOW's exact scope, required inputs, analysis period, recommendation delivery date, and expected Google Sheet columns or contents. If the client later asks for 150 pages or additional languages, explain what the current document establishes and what it leaves unresolved, rather than silently expanding the fixed 114-page English-language scope.\",\n  \"conversation_history\": []\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{baseUrl}}/query",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "query"
+          ]
+        },
+        "description": "query is required. conversation_history is optional; omit it or send [] when there is no prior turn."
+      }
+    }
+  ]
+}

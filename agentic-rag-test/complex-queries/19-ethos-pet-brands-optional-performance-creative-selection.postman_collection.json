@@ -1,0 +1,51 @@
+{
+  "info": {
+    "_postman_id": "62933f23-bac8-54cc-9377-3db1d08e5998",
+    "name": "19. Ethos Pet Brands — Optional performance creative selection",
+    "description": "POST /query rewrites the question, decomposes it into a DAG, and streams one JSON object per line (application/x-ndjson). Each line is {\"id\", \"response\", \"references\"}.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://127.0.0.1:8000"
+    }
+  ],
+  "item": [
+    {
+      "name": "19. Ethos Pet Brands — Optional performance creative selection",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Accept",
+            "value": "application/x-ndjson"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"query\": \"The client is comparing all options under Optional Performance Creative. Enumerate each option accurately, preserving the asset count, aspect ratios, iterations, and monthly versus quarterly cadence. Calculate the deliverable totals where the SOW explicitly gives totals, and explain why the options should be treated as alternatives rather than all automatically included together. Include the two rounds of revisions and the stated additional-revision fee.\",\n  \"conversation_history\": []\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{baseUrl}}/query",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "query"
+          ]
+        },
+        "description": "query is required. conversation_history is optional; omit it or send [] when there is no prior turn."
+      }
+    }
+  ]
+}

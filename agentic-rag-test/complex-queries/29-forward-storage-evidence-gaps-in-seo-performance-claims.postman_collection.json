@@ -1,0 +1,51 @@
+{
+  "info": {
+    "_postman_id": "af2dce53-7a83-5846-9b0e-0d7cc3002f75",
+    "name": "29. Forward Storage — Evidence gaps in SEO performance claims",
+    "description": "POST /query rewrites the question, decomposes it into a DAG, and streams one JSON object per line (application/x-ndjson). Each line is {\"id\", \"response\", \"references\"}.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://127.0.0.1:8000"
+    }
+  ],
+  "item": [
+    {
+      "name": "29. Forward Storage — Evidence gaps in SEO performance claims",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Accept",
+            "value": "application/x-ndjson"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"query\": \"A stakeholder asks for guaranteed ranking gains, a fixed number of backlinks, weekly implementation hours, and a promise that every property will rank first in local results. Compare these requests with the SOW's objectives, audit/template/playbook scope, monthly reporting, and twice-monthly strategic meetings. Identify which items are not promised in the document and explain how to distinguish the stated goal of increased organic visibility from a contractual guarantee of a particular outcome.\",\n  \"conversation_history\": []\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{baseUrl}}/query",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "query"
+          ]
+        },
+        "description": "query is required. conversation_history is optional; omit it or send [] when there is no prior turn."
+      }
+    }
+  ]
+}

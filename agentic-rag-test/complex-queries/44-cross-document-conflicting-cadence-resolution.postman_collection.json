@@ -1,0 +1,51 @@
+{
+  "info": {
+    "_postman_id": "f2808cf5-9ba2-5cb5-9e16-b4b5943463c8",
+    "name": "44. Cross-document — Conflicting cadence resolution",
+    "description": "POST /query rewrites the question, decomposes it into a DAG, and streams one JSON object per line (application/x-ndjson). Each line is {\"id\", \"response\", \"references\"}.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://127.0.0.1:8000"
+    }
+  ],
+  "item": [
+    {
+      "name": "44. Cross-document — Conflicting cadence resolution",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Accept",
+            "value": "application/x-ndjson"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"query\": \"A user claims that every client receives weekly meetings and monthly reporting because one SOW says so. Compare the actual cadence language in Fana Jewelry, Ethos Pet Brands, Forward Storage, and Hoffman Media, and contrast it with Hexagon's project milestones. Identify the cadence explicitly stated for each document, including Fana's quarterly campaign presentation and at-least-monthly meeting, Ethos's weekly meetings plus monthly business review, Forward Storage's at-least-twice-monthly strategic meetings, and any cadence not specified in the Hoffman excerpt. Explain how retrieval should preserve client-specific context.\",\n  \"conversation_history\": []\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{baseUrl}}/query",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "query"
+          ]
+        },
+        "description": "query is required. conversation_history is optional; omit it or send [] when there is no prior turn."
+      }
+    }
+  ]
+}

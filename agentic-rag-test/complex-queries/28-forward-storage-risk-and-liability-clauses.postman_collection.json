@@ -1,0 +1,51 @@
+{
+  "info": {
+    "_postman_id": "04657b70-31a1-5f84-b45a-80de55cd62cc",
+    "name": "28. Forward Storage — Risk and liability clauses",
+    "description": "POST /query rewrites the question, decomposes it into a DAG, and streams one JSON object per line (application/x-ndjson). Each line is {\"id\", \"response\", \"references\"}.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://127.0.0.1:8000"
+    }
+  ],
+  "item": [
+    {
+      "name": "28. Forward Storage — Risk and liability clauses",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Accept",
+            "value": "application/x-ndjson"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"query\": \"A client asks whether all business losses caused by an SEO error would automatically be reimbursed. Summarize the SOW's limitation on indirect, special, incidental, and consequential damages, the stated exceptions for indemnification, gross negligence, and willful misconduct, the six-month service-fee liability cap excluding third-party fees, and the one-year deadline for claims. Explain why a wrapper should describe the written clause neutrally and avoid making a legal determination about whether a specific claim qualifies for an exception.\",\n  \"conversation_history\": []\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{baseUrl}}/query",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "query"
+          ]
+        },
+        "description": "query is required. conversation_history is optional; omit it or send [] when there is no prior turn."
+      }
+    }
+  ]
+}

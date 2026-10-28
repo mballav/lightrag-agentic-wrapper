@@ -1,0 +1,51 @@
+{
+  "info": {
+    "_postman_id": "9d529c7e-a482-529f-938d-542c5c279eae",
+    "name": "50. Agentic RAG stress test — Plan, retrieve, calculate, verify, and answer",
+    "description": "POST /query rewrites the question, decomposes it into a DAG, and streams one JSON object per line (application/x-ndjson). Each line is {\"id\", \"response\", \"references\"}.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://127.0.0.1:8000"
+    }
+  ],
+  "item": [
+    {
+      "name": "50. Agentic RAG stress test — Plan, retrieve, calculate, verify, and answer",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Accept",
+            "value": "application/x-ndjson"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"query\": \"A portfolio executive asks for a consolidated action plan across the five clients for the next quarter. The response must identify upcoming workstreams and dependencies, quantify only fees that can be calculated from stated rates, separate agency fees from third-party/media spend, distinguish recurring services from one-time projects, list client approvals/access/data needed, preserve each client's reporting cadence and termination/notice constraints, and call out any missing dates, amendments, or underlying performance data. Describe the sequence of retrieval and verification steps an agentic RAG wrapper should take, the cross-document joins it must perform, the calculations it can safely execute, and the unsupported conclusions it must refuse to invent.\",\n  \"conversation_history\": []\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{baseUrl}}/query",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "query"
+          ]
+        },
+        "description": "query is required. conversation_history is optional; omit it or send [] when there is no prior turn."
+      }
+    }
+  ]
+}

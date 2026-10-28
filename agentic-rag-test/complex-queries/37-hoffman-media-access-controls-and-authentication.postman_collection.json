@@ -1,0 +1,51 @@
+{
+  "info": {
+    "_postman_id": "64a04745-daa4-56c1-85ec-c5825ad86bff",
+    "name": "37. Hoffman Media — Access controls and authentication",
+    "description": "POST /query rewrites the question, decomposes it into a DAG, and streams one JSON object per line (application/x-ndjson). Each line is {\"id\", \"response\", \"references\"}.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://127.0.0.1:8000"
+    }
+  ],
+  "item": [
+    {
+      "name": "37. Hoffman Media — Access controls and authentication",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Accept",
+            "value": "application/x-ndjson"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"query\": \"A security reviewer asks for every relevant access-control commitment described in the appendix. Summarize approval for logical access, revocation after termination, quarterly access reviews, unique identifiers, prohibition on shared accounts, session protection after 30 minutes, account lockout after three failed attempts, password length and complexity, reuse prevention across 12 prior passwords, 90-day password changes, VPN access, and restricted source-code modification. Organize these controls by identity, authentication, remote access, and privileged access without omitting their stated thresholds.\",\n  \"conversation_history\": []\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{baseUrl}}/query",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "query"
+          ]
+        },
+        "description": "query is required. conversation_history is optional; omit it or send [] when there is no prior turn."
+      }
+    }
+  ]
+}

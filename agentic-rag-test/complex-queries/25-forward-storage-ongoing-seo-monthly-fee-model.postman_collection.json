@@ -1,0 +1,51 @@
+{
+  "info": {
+    "_postman_id": "ac852f4a-c33b-5c49-997e-3e81f1c12c66",
+    "name": "25. Forward Storage — Ongoing SEO monthly fee model",
+    "description": "POST /query rewrites the question, decomposes it into a DAG, and streams one JSON object per line (application/x-ndjson). Each line is {\"id\", \"response\", \"references\"}.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://127.0.0.1:8000"
+    }
+  ],
+  "item": [
+    {
+      "name": "25. Forward Storage — Ongoing SEO monthly fee model",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Accept",
+            "value": "application/x-ndjson"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"query\": \"The initial ongoing SEO floor is $6,500 per month for 22 locations, and additional specified existing properties are priced at $230 per location per month. Calculate the monthly fee for the base 22 locations, for 27 locations, and for 32 locations if all additional locations are chargeable under the stated rule. Explain the distinction between the included initial 22-location floor and additional properties, and state the 30-day advance-notice expectations for adding or ending support for existing properties.\",\n  \"conversation_history\": []\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{baseUrl}}/query",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "query"
+          ]
+        },
+        "description": "query is required. conversation_history is optional; omit it or send [] when there is no prior turn."
+      }
+    }
+  ]
+}

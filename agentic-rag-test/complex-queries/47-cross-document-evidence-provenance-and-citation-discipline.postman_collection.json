@@ -1,0 +1,51 @@
+{
+  "info": {
+    "_postman_id": "46b5f45d-e3aa-5e2f-aa44-acc1c4eae5c8",
+    "name": "47. Cross-document — Evidence provenance and citation discipline",
+    "description": "POST /query rewrites the question, decomposes it into a DAG, and streams one JSON object per line (application/x-ndjson). Each line is {\"id\", \"response\", \"references\"}.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://127.0.0.1:8000"
+    }
+  ],
+  "item": [
+    {
+      "name": "47. Cross-document — Evidence provenance and citation discipline",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Accept",
+            "value": "application/x-ndjson"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"query\": \"A user asks the agent to produce a management memo combining all five SOWs. Design a source-grounded answer structure that associates each client fact with the correct document, distinguishes proposal language from executed agreement language where visible, preserves effective dates and client names, and cites the relevant source sections. Explain how to avoid mixing Hexagon's $18,500 fixed project fee with Forward Storage's $6,500 monthly floor, or Ethos's dashboard fee with Fana's retainer. Identify why ambiguous names, effective dates, and amendments should trigger verification rather than silent reconciliation.\",\n  \"conversation_history\": []\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{baseUrl}}/query",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "query"
+          ]
+        },
+        "description": "query is required. conversation_history is optional; omit it or send [] when there is no prior turn."
+      }
+    }
+  ]
+}

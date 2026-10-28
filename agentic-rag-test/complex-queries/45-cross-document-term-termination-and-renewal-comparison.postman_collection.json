@@ -1,0 +1,51 @@
+{
+  "info": {
+    "_postman_id": "a033fe9e-cdf8-580b-9152-5af881d189b8",
+    "name": "45. Cross-document — Term, termination, and renewal comparison",
+    "description": "POST /query rewrites the question, decomposes it into a DAG, and streams one JSON object per line (application/x-ndjson). Each line is {\"id\", \"response\", \"references\"}.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://127.0.0.1:8000"
+    }
+  ],
+  "item": [
+    {
+      "name": "45. Cross-document — Term, termination, and renewal comparison",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Accept",
+            "value": "application/x-ndjson"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"query\": \"Compare Fana Jewelry's term end date, automatic 12-month renewal, 90-day notice to avoid renewal, and early-termination clause; Ethos Pet Brands' fixed term through December 31, 2024 followed by month-to-month continuation and 30-day written termination; Forward Storage's six-month initial ongoing SEO term followed by reassessment; and the project-completion terms in Hexagon. Include Hoffman Media's available SOW date/initial project framing only to the extent supported. Explain why a wrapper must not transfer one client's termination rights to another client's agreement.\",\n  \"conversation_history\": []\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{baseUrl}}/query",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "query"
+          ]
+        },
+        "description": "query is required. conversation_history is optional; omit it or send [] when there is no prior turn."
+      }
+    }
+  ]
+}

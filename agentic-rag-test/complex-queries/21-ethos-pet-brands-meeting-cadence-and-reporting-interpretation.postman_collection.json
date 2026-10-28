@@ -1,0 +1,51 @@
+{
+  "info": {
+    "_postman_id": "b7cec823-b25b-578a-a2ac-f88db15accc6",
+    "name": "21. Ethos Pet Brands — Meeting cadence and reporting interpretation",
+    "description": "POST /query rewrites the question, decomposes it into a DAG, and streams one JSON object per line (application/x-ndjson). Each line is {\"id\", \"response\", \"references\"}.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://127.0.0.1:8000"
+    }
+  ],
+  "item": [
+    {
+      "name": "21. Ethos Pet Brands — Meeting cadence and reporting interpretation",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Accept",
+            "value": "application/x-ndjson"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"query\": \"A project manager interprets “formal reporting monthly” as meaning client meetings occur only monthly. Test this interpretation against the SOW's weekly meetings and monthly business review. Explain what weekly meetings cover, what monthly reporting/reviews cover, which team roles are named, and how the dashboard views relate to—but do not replace—the formal reporting and meeting commitments.\",\n  \"conversation_history\": []\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{baseUrl}}/query",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "query"
+          ]
+        },
+        "description": "query is required. conversation_history is optional; omit it or send [] when there is no prior turn."
+      }
+    }
+  ]
+}

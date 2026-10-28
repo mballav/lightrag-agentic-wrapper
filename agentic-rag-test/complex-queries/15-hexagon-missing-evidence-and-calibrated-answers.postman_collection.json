@@ -1,0 +1,51 @@
+{
+  "info": {
+    "_postman_id": "478952cf-1f3a-5d9a-aa59-341a24ecd949",
+    "name": "15. Hexagon — Missing evidence and calibrated answers",
+    "description": "POST /query rewrites the question, decomposes it into a DAG, and streams one JSON object per line (application/x-ndjson). Each line is {\"id\", \"response\", \"references\"}.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://127.0.0.1:8000"
+    }
+  ],
+  "item": [
+    {
+      "name": "15. Hexagon — Missing evidence and calibrated answers",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Accept",
+            "value": "application/x-ndjson"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"query\": \"A user asks the wrapper to name every missing page, state the exact organic traffic lost, and identify which deleted content Hexagon approved. The SOW describes the investigation but does not contain the underlying analytics export, page-level supplement, or confirmation of individual deletions. Explain what a reliable RAG response should answer from the SOW, what must be retrieved from supporting data or requested from Hexagon, and how it should explicitly communicate that the requested page-level facts are not present in the SOW itself.\",\n  \"conversation_history\": []\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{baseUrl}}/query",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "query"
+          ]
+        },
+        "description": "query is required. conversation_history is optional; omit it or send [] when there is no prior turn."
+      }
+    }
+  ]
+}

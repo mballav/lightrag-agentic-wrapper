@@ -1,0 +1,51 @@
+{
+  "info": {
+    "_postman_id": "1f802794-c8f7-5017-b44a-635585c3e2af",
+    "name": "07. Fana Jewelry — Monthly retainer, renewal, and early termination",
+    "description": "POST /query rewrites the question, decomposes it into a DAG, and streams one JSON object per line (application/x-ndjson). Each line is {\"id\", \"response\", \"references\"}.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://127.0.0.1:8000"
+    }
+  ],
+  "item": [
+    {
+      "name": "07. Fana Jewelry — Monthly retainer, renewal, and early termination",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Accept",
+            "value": "application/x-ndjson"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"query\": \"Calculate the original monthly retainer by combining the stated organic social/photography/video and paid-social components, then calculate the monthly fee after one 7% renewal increase if the same base applies. Explain the SOW's stated end date, automatic renewal period, written notice needed to avoid renewal, and separate early-termination notice and remaining-term payment formula. Point out why the renewal notice and early-termination provisions must not be collapsed into one rule.\",\n  \"conversation_history\": []\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{baseUrl}}/query",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "query"
+          ]
+        },
+        "description": "query is required. conversation_history is optional; omit it or send [] when there is no prior turn."
+      }
+    }
+  ]
+}

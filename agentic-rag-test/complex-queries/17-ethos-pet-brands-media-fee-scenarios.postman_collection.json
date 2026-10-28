@@ -1,0 +1,51 @@
+{
+  "info": {
+    "_postman_id": "ca8abe67-c51d-521d-89be-f1fd587c6674",
+    "name": "17. Ethos Pet Brands — Media fee scenarios",
+    "description": "POST /query rewrites the question, decomposes it into a DAG, and streams one JSON object per line (application/x-ndjson). Each line is {\"id\", \"response\", \"references\"}.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://127.0.0.1:8000"
+    }
+  ],
+  "item": [
+    {
+      "name": "17. Ethos Pet Brands — Media fee scenarios",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Accept",
+            "value": "application/x-ndjson"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"query\": \"Apply the media rate table exactly as written to monthly spend scenarios of $200,000, $300,000, $400,000, $500,000, $600,000, and $750,000. For each scenario, identify the applicable row and calculate the stated fee using the row's fixed-fee or percentage language. Highlight any ambiguity at boundary values or between bands, if relevant, and do not invent a fee rule for spend above the highest listed band. Treat the $25,000 minimum monthly fee as a key constraint.\",\n  \"conversation_history\": []\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{baseUrl}}/query",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "query"
+          ]
+        },
+        "description": "query is required. conversation_history is optional; omit it or send [] when there is no prior turn."
+      }
+    }
+  ]
+}
