@@ -15,20 +15,33 @@ from lightrag_wrapper.query_decomposer.query_decomposer import (
 
 def test_render_inserts_catalog_without_touching_examples():
     catalog = json.dumps({"documents": [{"file_path": "leave-policy.pdf"}]})
-    prompt = render_decomposer_prompt(
+    system, user = render_decomposer_prompt(
         "How many leave days?",
         [{"role": "user", "content": "Berlin office"}],
         catalog,
     )
-    assert "How many leave days?" in prompt
-    assert "leave-policy.pdf" in prompt
-    assert "Berlin office" in prompt
-    assert '"nodeType": "retrieve"' in prompt
-    assert "23. EXECUTION CONTRACT" in prompt
-    assert "carry forward the project identity and Company X" in prompt
-    assert "{user_query}" not in prompt
-    assert "{knowledge_base_metadata}" not in prompt
-    assert "{previous_messages}" not in prompt
+    assert "How many leave days?" in user
+    assert "Berlin office" in user
+    assert "leave-policy.pdf" in system
+    assert "How many leave days?" not in system
+    assert '"nodeType": "retrieve"' in system
+    assert "23. EXECUTION CONTRACT" in system
+    assert "carry forward the project identity and Company X" in system
+    assert system.index("carry forward the project identity and Company X") < system.index("24. OUTPUT FORMAT")
+    assert system.index("24. OUTPUT FORMAT") < system.index("leave-policy.pdf")
+    assert "several facts that would not sit in the same passage" in system
+    assert system.index("30. EXAMPLE: DO NOT INVENT HYPOTHESES") < system.index(
+        "31. EXAMPLE: SEVERAL FACTS IN ONE DOCUMENT"
+    )
+    assert system.index("31. EXAMPLE: SEVERAL FACTS IN ONE DOCUMENT") < system.index("24. OUTPUT FORMAT")
+    example = system.split("31. EXAMPLE: SEVERAL FACTS IN ONE DOCUMENT", 1)[1].split("24. OUTPUT FORMAT", 1)[0]
+    assert example.count("retrieve") >= 3
+    assert "synthesize" in example
+    assert "depends on [1, 2, 3]" in example
+    combined = system + user
+    assert "{user_query}" not in combined
+    assert "{knowledge_base_metadata}" not in combined
+    assert "{previous_messages}" not in combined
 
 
 def test_parse_decomposition_accepts_a_dag_and_rejects_cycles():
@@ -133,6 +146,8 @@ class _CatalogAdapter:
 
 
 class _LLM:
+    model_high_end = "test-high"
+
     def __init__(self, payload):
         self.payload = payload
         self.prompt = None
@@ -141,6 +156,7 @@ class _LLM:
         if isinstance(self.payload, Exception):
             raise self.payload
         self.prompt = prompt
+        self.system_prompt = kwargs.get("system_prompt") or ""
         return self.payload
 
 
@@ -157,8 +173,9 @@ async def test_decompose_puts_catalog_in_the_prompt():
     plan = await decomposer.decompose("How many days?", [{"role": "user", "content": "leave"}])
     assert plan is not None
     assert plan.nodes[0].subquery == "Retrieve the leave policy."
-    assert "leave-policy.pdf" in llm.prompt
-    assert "18 days" in llm.prompt
+    assert "How many days?" in llm.prompt
+    assert "leave-policy.pdf" in llm.system_prompt
+    assert "18 days" in llm.system_prompt
 
 
 async def test_decompose_saves_a_dag_only_when_enabled(tmp_path):
@@ -256,4 +273,4 @@ async def test_decompose_continues_when_the_catalog_cannot_be_loaded():
     )
     plan = await QueryDecomposer(llm, BrokenAdapter()).decompose("How many days?")
     assert plan is not None
-    assert "could not be loaded" in llm.prompt
+    assert "could not be loaded" in llm.system_prompt

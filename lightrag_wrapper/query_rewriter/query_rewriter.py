@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import re
+import time
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -11,6 +12,7 @@ from lightrag_wrapper.exceptions import LLMServiceError
 from lightrag_wrapper.log import get_logger
 from lightrag_wrapper.llm.service import LLMService
 from lightrag_wrapper.query_rewriter.rewrite_prompt import SYSTEM_PROMPT
+from lightrag_wrapper.query_timing import QueryTiming
 
 logger = get_logger(__name__)
 
@@ -41,6 +43,8 @@ class QueryRewriter:
         self,
         query: str,
         conversation_history: list[dict[str, str]] | None = None,
+        *,
+        timing: QueryTiming | None = None,
     ) -> RewrittenQuery:
         """Return a retrieval query and keyword lists for ``query``."""
         cleaned = query.strip()
@@ -48,11 +52,14 @@ class QueryRewriter:
             return _fallback(query)
 
         user_prompt = _render_input(cleaned, conversation_history)
+        started = time.perf_counter()
         try:
             raw = await self._llm.complete_prompt(
                 user_prompt,
                 system_prompt=SYSTEM_PROMPT,
                 response_format={"type": "json_object"},
+                model=self._llm.model_cheap,
+                reasoning_effort="none",
             )
         except LLMServiceError as exc:
             logger.warning(
@@ -60,6 +67,9 @@ class QueryRewriter:
                 error=str(exc),
             )
             return _fallback(cleaned)
+        finally:
+            if timing is not None:
+                timing.add_rewriter_call(time.perf_counter() - started)
 
         parsed = _parse_rewrite(raw if isinstance(raw, str) else str(raw), cleaned)
         if parsed is None:

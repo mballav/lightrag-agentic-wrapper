@@ -18,6 +18,8 @@ import tenacity
 from lightrag_wrapper.config import LightRAGConfig, get_config
 from lightrag_wrapper.exceptions import LLMServiceError
 from lightrag_wrapper.log import get_logger
+from lightrag_wrapper.llm.usage import note_token_usage
+from lightrag_wrapper.query_timing import note_reported_llm_seconds
 
 logger = get_logger(__name__)
 
@@ -178,7 +180,9 @@ class LLMService:
         self,
         config: LightRAGConfig | None = None,
         *,
-        model: str | None = None,
+        model_cheap: str | None = None,
+        model_mid_tier: str | None = None,
+        model_high_end: str | None = None,
         embedding_model: str | None = None,
         api_key: str | None = None,
         api_base: str | None = None,
@@ -199,9 +203,11 @@ class LLMService:
         self._embedding_binding = embedding_binding or (
             config.embedding_binding if config else self._binding
         )
-        self._model = model or (config.llm_model if config else "gpt-4o-mini")
+        self._model_cheap = model_cheap or (config.llm_model_cheap if config else "gpt-6-luna")
+        self._model_mid_tier = model_mid_tier or (config.llm_model_mid_tier if config else "gpt-6.1-terra")
+        self._model_high_end = model_high_end or (config.llm_model_high_end if config else "gpt-6.1-sol")
         self._embedding_model = embedding_model or (
-            config.embedding_model if config else self._model
+            config.embedding_model if config else "text-embedding-3-small"
         )
         self._api_key = api_key
         if self._api_key is None and config is not None:
@@ -272,8 +278,16 @@ class LLMService:
         return cls(await get_config())
 
     @property
-    def model(self) -> str:
-        return resolve_litellm_model(self._binding, self._model)
+    def model_cheap(self) -> str:
+        return resolve_litellm_model(self._binding, self._model_cheap)
+
+    @property
+    def model_mid_tier(self) -> str:
+        return resolve_litellm_model(self._binding, self._model_mid_tier)
+
+    @property
+    def model_high_end(self) -> str:
+        return resolve_litellm_model(self._binding, self._model_high_end)
 
     @property
     def embedding_model(self) -> str:
@@ -338,7 +352,7 @@ class LLMService:
         return await self.invoke(
             "embedding",
             input=input,
-            model=model or self.embedding_model,
+            model=self.embedding_model,
             api_key=kwargs.pop("api_key", self._embedding_api_key),
             api_base=kwargs.pop("api_base", self._embedding_api_base),
             **kwargs,
@@ -403,6 +417,7 @@ class LLMService:
         self,
         prompt: str,
         *,
+        model: str | None = None,
         system_prompt: str | None = None,
         history_messages: Sequence[Mapping[str, Any]] | None = None,
         **kwargs: Any,
@@ -419,9 +434,11 @@ class LLMService:
             messages.extend(dict(item) for item in history_messages)
         messages.append({"role": "user", "content": prompt})
 
-        response = await self.complete(messages=messages, **call_kwargs)
+        response = await self.complete(messages=messages, model=model, **call_kwargs)
         if stream:
             return self._iter_completion_text(response, enable_cot=enable_cot)
+        note_reported_llm_seconds(response)
+        note_token_usage(response)
         return self._extract_completion_text(response, enable_cot=enable_cot)
 
     async def embed_texts(
@@ -457,6 +474,7 @@ class LLMService:
         ) -> Any:
             return await self.complete_prompt(
                 prompt,
+                model=self.model_cheap,
                 system_prompt=system_prompt,
                 history_messages=history_messages,
                 **kwargs,
@@ -492,7 +510,7 @@ class LLMService:
             embedding_dim=embedding_dim,
             max_token_size=max_token_size,
             func=_embed,
-            model_name=model_name or self._embedding_model,
+            model_name=self._embedding_model,
             send_dimensions=send_dimensions,
         )
 
@@ -644,7 +662,7 @@ class LLMService:
             if operation == "aembedding":
                 prepared["model"] = self.embedding_model
             else:
-                prepared["model"] = self.model
+                prepared["model"] = self.model_cheap
         elif isinstance(prepared["model"], str) and "/" not in prepared["model"]:
             binding = (
                 self._embedding_binding if operation == "aembedding" else self._binding

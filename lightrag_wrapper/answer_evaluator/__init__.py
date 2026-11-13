@@ -2,6 +2,7 @@
 
 from lightrag_wrapper.answer_evaluator.evaluator import (
     AnswerEvaluator,
+    ClaimAssessment,
     Evaluation,
     RetrievalAttempt,
     UpstreamOutput,
@@ -10,6 +11,7 @@ from lightrag_wrapper.answer_evaluator.evaluator import (
 
 __all__ = [
     "AnswerEvaluator",
+    "ClaimAssessment",
     "Evaluation",
     "RetrievalAttempt",
     "UpstreamOutput",

@@ -68,6 +68,8 @@ class QueryModeRouter:
                 cleaned,
                 system_prompt=_SYSTEM_PROMPT,
                 response_format={"type": "json_object"},
+                model=self._llm.model_cheap,
+                reasoning_effort="none",
             )
         except LLMServiceError as exc:
             logger.warning(

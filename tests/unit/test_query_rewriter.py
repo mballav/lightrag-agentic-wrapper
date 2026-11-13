@@ -11,6 +11,8 @@ from lightrag_wrapper.query_rewriter.query_rewriter import (
 
 
 class FakeLLM:
+    model_mid_tier = "test-mid"
+
     def __init__(self, payload):
         self.payload = payload
         self.prompts = []

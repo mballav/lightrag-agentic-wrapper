@@ -89,7 +89,7 @@ class APIRewriter:
     def __init__(self, llm):
         self.llm = llm
 
-    async def rewrite(self, query, conversation_history=None):
+    async def rewrite(self, query, conversation_history=None, timing=None):
         return RewrittenQuery(
             rewritten_query=query.strip(),
             high_level_keywords=["leave"],
@@ -98,12 +98,12 @@ class APIRewriter:
 
 
 class APIDecomposer:
-    def __init__(self, llm, adapter):
+    def __init__(self, llm, adapter, **kwargs):
         self.llm = llm
         self.adapter = adapter
         self.return_plan = True
 
-    async def decompose(self, query, conversation_history=None):
+    async def decompose(self, query, conversation_history=None, timing=None):
         if not self.return_plan:
             return None
         return Decomposition(
@@ -121,11 +121,16 @@ class APIDecomposer:
 
 
 class APILLM:
+    model_cheap = "test-cheap"
+    model_mid_tier = "test-mid"
+
     async def complete_prompt(self, prompt, **kwargs):
         system = kwargs.get("system_prompt") or ""
         if "Evidence Evaluator" in system:
             return (
-                '{"decision": "SUFFICIENT", "missing_information": [],'
+                '{"claims": [{"claim": "Berlin leave days", "status": "SUPPORTED",'
+                ' "evidence_ids": ["E1"], "conflict": null}],'
+                ' "decision": "SUFFICIENT", "missing_information": [],'
                 ' "next_action": {"type": "SUFFICIENT", "purpose": null,'
                 ' "query": null, "mode": null}}'
             )
@@ -247,7 +252,7 @@ def test_ingest_files_and_status(api_app, document_paths):
     assert client.post("/ingest/status", json={"track_ids": ["t"]}).status_code == 422
 
 
-def test_query_pipeline(api_app):
+def test_query_pipeline(api_app, tmp_path):
     client, holder = api_app
     response = client.post(
         "/query",
@@ -261,6 +266,9 @@ def test_query_pipeline(api_app):
     line = json.loads(response.text)
     assert line["id"] == 1
     assert "leave days" in line["response"]
+    report = (tmp_path / "times.log").read_text(encoding="utf-8")
+    assert report.split("Query rewriter", 1)[0].count("How many leave days does Berlin grant?") == 1
+    assert "Node execution time:" in report
 
     holder["adapter"].fail = "adapter"
     failed = client.post("/query", json={"query": "x"})
@@ -296,7 +304,7 @@ async def test_a_failure_after_a_result_line_ends_the_stream_with_an_error():
     ]
 
 
-def test_query_without_a_plan_retrieves_context_only(api_app):
+def test_query_without_a_plan_retrieves_context_only(api_app, tmp_path):
     import lightrag_wrapper.app as app_module
 
     client, holder = api_app
@@ -311,6 +319,9 @@ def test_query_without_a_plan_retrieves_context_only(api_app):
     assert kwargs["only_need_context"] is True
     assert kwargs["high_level_keywords"] == ["leave"]
     assert kwargs["low_level_keywords"] == ["Berlin"]
+    report = (tmp_path / "times.log").read_text(encoding="utf-8")
+    assert "How many leave days?" in report.split("Query rewriter", 1)[0]
+    assert "not executed" in report
 
 
 def test_query_without_a_plan_still_returns_an_http_error(api_app):

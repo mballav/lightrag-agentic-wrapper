@@ -259,6 +259,24 @@ def test_supported_kwargs_and_output():
     assert none is None
     assert _normalize_query_output(12, True) == ("12", None)
     assert _normalize_query_output({"content": "c"}, False)[1] is None
+    answer, chunks = _normalize_query_output(
+        {
+            "llm_response": {"content": "April"},
+            "data": {
+                "chunks": [
+                    {
+                        "content": "The Q1 Financial Report, released in April, highlighted growth.",
+                        "file_path": "InnovateTech",
+                        "reference_id": "1",
+                    }
+                ],
+                "references": [{"reference_id": "1", "file_path": "InnovateTech"}],
+            },
+        },
+        True,
+    )
+    assert answer == "April"
+    assert chunks[0].content[0].startswith("The Q1 Financial Report")
 
 
 def test_export_skips_missing_password(tmp_path, monkeypatch):

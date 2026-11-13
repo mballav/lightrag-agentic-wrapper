@@ -100,8 +100,8 @@ class DAGVisualizer:
 
         fill = _NODE_COLORS.get(node.node_type, "#f8fafc")
         summary = textwrap.fill(node.subquery.strip(), width=28)
-        if summary.count("\n") > 2:
-            summary = "\n".join(summary.splitlines()[:3]).rstrip(".") + "..."
+        if summary.count("\n") > 3:
+            summary = "\n".join(summary.splitlines()[:4]).rstrip(".") + "..."
         if node.is_result_node:
             axes.add_patch(
                 FancyBboxPatch(

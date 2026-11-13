@@ -21,8 +21,17 @@ def _node(node_id, node_type, subquery, depends_on, is_result):
 
 
 def _decision(decision, query=None, mode=None, missing=None):
+    claim_status = "SUPPORTED" if decision == "SUFFICIENT" else "UNSUPPORTED"
     return json.dumps(
         {
+            "claims": [
+                {
+                    "claim": "the requested fact",
+                    "status": claim_status,
+                    "evidence_ids": ["E1"] if claim_status == "SUPPORTED" else [],
+                    "conflict": None,
+                }
+            ],
             "decision": decision,
             "missing_information": missing or [],
             "next_action": {
@@ -36,9 +45,13 @@ def _decision(decision, query=None, mode=None, missing=None):
 
 
 class _LLM:
+    model_cheap = "test-cheap"
+    model_mid_tier = "test-mid"
+
     def __init__(self):
         self.prompts = []
         self.system_prompts = []
+        self.call_kwargs = []
         self.resolved = "executives who approved Project Alpha"
         self.evaluations = []
         self.fail_evaluator = False
@@ -46,6 +59,7 @@ class _LLM:
 
     async def complete_prompt(self, prompt, **kwargs):
         self.prompts.append(prompt)
+        self.call_kwargs.append(kwargs)
         system = kwargs.get("system_prompt") or ""
         self.system_prompts.append(system)
         if "standalone search string" in system:
@@ -185,8 +199,20 @@ async def test_compare_uses_both_branches_and_does_not_search_again():
     assert all("Compare the 2024 and 2026 policies." not in prompt for prompt in evaluations)
     compared = _prompts_for(llm, "one operation")
     assert len(compared) == 1
-    assert "evidence:2024 policy" in compared[0]
+    assert "2024 policy.pdf: passage" in compared[0]
+    assert "evidence:2024 policy" not in compared[0]
     assert "evidence:2026 policy" in compared[0]
+    reason_systems = [system for system in llm.system_prompts if "one operation" in system]
+    assert len(reason_systems) == 1
+    assert "The operation is compare." in reason_systems[0]
+    assert "filter:" not in reason_systems[0]
+    reason_kwargs = [
+        kwargs
+        for kwargs, system in zip(llm.call_kwargs, llm.system_prompts)
+        if "one operation" in system
+    ]
+    assert reason_kwargs[0]["reasoning_effort"] == "none"
+    assert reason_kwargs[0]["max_completion_tokens"] == 10000
     assert "Compare the two policies." in compared[0]
     assert "Compare the 2024 and 2026 policies." in compared[0]
     assert len(events) == 1
@@ -286,6 +312,37 @@ async def test_a_result_node_still_feeds_its_children():
     assert events[1]["response"] == "assembled answer"
 
 
+async def test_a_join_waits_until_every_parent_has_finished():
+    executor, llm, _adapter, _router = _executor()
+    filter_started = asyncio.Event()
+    release_filter = asyncio.Event()
+    original = llm.complete_prompt
+
+    async def complete_prompt(prompt, **kwargs):
+        system = kwargs.get("system_prompt") or ""
+        if "one operation" in system and "Operation type: filter" in prompt:
+            filter_started.set()
+            await release_filter.wait()
+        return await original(prompt, **kwargs)
+
+    llm.complete_prompt = complete_prompt
+    nodes = [
+        _node(1, "retrieve", "Find the policy.", [], False),
+        _node(2, "filter", "Keep the allowance.", [1], False),
+        _node(3, "synthesize", "State the allowance.", [1, 2], True),
+    ]
+    task = asyncio.create_task(
+        _events(executor, nodes, user_query="What is the allowance?")
+    )
+    await asyncio.wait_for(filter_started.wait(), timeout=2)
+    await asyncio.sleep(0.05)
+    assert not task.done()
+    assert not any("State the allowance." in prompt for prompt in llm.prompts)
+    release_filter.set()
+    events = await asyncio.wait_for(task, timeout=2)
+    assert [event["id"] for event in events] == [3]
+
+
 async def test_blank_resolution_keeps_the_subquery():
     executor, llm, adapter, _router = _executor()
     llm.resolved = "   "
@@ -373,7 +430,7 @@ async def test_a_follow_up_search_uses_the_evaluator_query_and_mode():
 
     assert [query for query, _kwargs in adapter.calls] == [
         "vacation policy",
-        "What does the vacation policy grant?",
+        "vacation policy",
     ]
     assert adapter.calls[0][1]["high_level_keywords"] == ["leave"]
     assert adapter.calls[1][1]["mode"] == QueryMode.HYBRID
@@ -385,7 +442,7 @@ async def test_a_follow_up_search_uses_the_evaluator_query_and_mode():
     assert "the allowance" in evaluations[1]
     assert events[0]["response"] == "answer:vacation policy"
     assert [ref["file_path"] for ref in events[0]["references"]] == [
-        "What does the vacation policy grant?.pdf",
+        "vacation policy.pdf",
     ]
 
 
@@ -394,7 +451,7 @@ async def test_citations_keep_parents_and_only_the_last_attempt():
     llm.resolved = "executives of the acquired project"
     llm.evaluations = [
         _decision("SUFFICIENT"),
-        _decision("RETRIEVE_MORE", "Who approved Project Alpha?", "local"),
+        _decision("RETRIEVE_MORE", "Who approved Project Alpha?", "hybrid"),
         _decision("SUFFICIENT"),
     ]
     nodes = [
@@ -407,11 +464,11 @@ async def test_citations_keep_parents_and_only_the_last_attempt():
     assert [query for query, _kwargs in adapter.calls] == [
         "Identify the project.",
         "executives of the acquired project",
-        "Who approved Project Alpha?",
+        "executives of the acquired project",
     ]
     assert [ref["file_path"] for ref in events[0]["references"]] == [
         "Identify the project..pdf",
-        "Who approved Project Alpha?.pdf",
+        "executives of the acquired project.pdf",
     ]
 
 
@@ -426,8 +483,10 @@ async def test_extra_retrievals_stop_after_the_budget():
 
     events = await _events(executor, nodes, user_query="Find it.")
 
-    assert [query for query, _kwargs in adapter.calls] == ["first search", "second search"]
+    assert [query for query, _kwargs in adapter.calls] == ["first search", "first search"]
+    assert adapter.calls[1][1]["mode"] is QueryMode.GLOBAL
     assert router.queries == ["first search"]
+    assert len(_prompts_for(llm, "Evidence Evaluator")) == 1
     assert events[0]["response"] == "answer:first search"
 
 
@@ -444,7 +503,7 @@ async def test_unusable_evaluation_does_not_search_again():
 
 async def test_a_repeated_follow_up_does_not_search_again():
     executor, llm, adapter, _router = _executor()
-    llm.evaluations = [_decision("RETRIEVE_MORE", "vacation policy", "global")]
+    llm.evaluations = [_decision("RETRIEVE_MORE", "vacation policy", "local")]
     nodes = [_node(1, "retrieve", "vacation policy", [], True)]
 
     await _events(executor, nodes, user_query="What is the vacation policy?")
@@ -477,3 +536,102 @@ async def test_cannot_answer_does_not_search_again():
 def test_missing_parent_output_is_an_error():
     with pytest.raises(RuntimeError, match="node 4"):
         _require_parent({}, 4)
+
+
+async def test_stream_accumulates_dag_times_and_writes_the_query(tmp_path):
+    from lightrag_wrapper.query_timing import QueryTiming
+
+    executor, _llm, _adapter, _router = _executor()
+    nodes = [
+        _node(1, "retrieve", "vacation policy", [], False),
+        _node(2, "assemble", "combine the evidence", [1], True),
+    ]
+    query = "What is the vacation policy?"
+    timing = QueryTiming(query=query)
+
+    events = await _events(executor, nodes, user_query=query, timing=timing)
+
+    assert events[0]["response"] == "assembled answer"
+    assert timing.dag_nodes == 2
+    assert timing.dag_llm_calls == 4
+    assert timing.dag_llm_response_samples == 1
+    assert timing.dag_llm_response_s == pytest.approx(1.0)
+    assert timing.dag_node_s + 1e-6 >= timing.dag_llm_call_s
+    text = (tmp_path / "times.log").read_text(encoding="utf-8")
+    head, _rewriter = text.split("Query rewriter", 1)
+    assert query in head
+    assert "LLM call time:" in text
+    assert "LLM response time: 1.000 s (1 of 4 calls returned a response_time)" in text
+    assert "Node execution time:" in text
+    assert "(2 nodes)" in text
+    node_1, node_2 = text.split("Node 2 (assemble)", 1)
+    assert "Node 1 (retrieve)" in node_1
+    assert node_1.index("route (") < node_1.index("retrieve 1:") < node_1.index("evaluate 1 (")
+    assert "retrieve 1:" in node_1 and "LLM response time 1.000 s" in node_1
+    assert "synthesize:" not in node_1
+    assert node_2.strip().startswith("reason:")
+    assert "LLM response time none" in node_2
+
+
+async def test_stream_logs_resolve_follow_up_and_synthesize(tmp_path):
+    from lightrag_wrapper.query_timing import QueryTiming
+
+    executor, llm, _adapter, _router = _executor()
+    llm.evaluations = [
+        _decision("SUFFICIENT"),
+        _decision(
+            "RETRIEVE_MORE",
+            "What does the vacation policy grant?",
+            "hybrid",
+            ["the allowance"],
+        ),
+        _decision("SUFFICIENT"),
+    ]
+    nodes = [
+        _node(1, "retrieve", "vacation policy", [], False),
+        _node(2, "retrieve", "Find who approved it.", [1], True),
+    ]
+    query = "Who approved the policy?"
+
+    await _events(executor, nodes, user_query=query, timing=QueryTiming(query=query))
+
+    text = (tmp_path / "times.log").read_text(encoding="utf-8")
+    node_1, node_2 = text.split("Node 2 (retrieve)", 1)
+    assert "Node 1 (retrieve)" in node_1
+    assert "resolve:" not in node_1
+    assert "synthesize:" not in node_1
+    assert (
+        node_2.index("resolve:")
+        < node_2.index("route (")
+        < node_2.index("retrieve 1:")
+        < node_2.index("evaluate 1 (")
+        < node_2.index("retrieve 2:")
+        < node_2.index("evaluate 2 (")
+        < node_2.index("synthesize:")
+    )
+    assert node_2.count("LLM response time 1.000 s") == 2
+
+
+async def test_a_failed_retrieval_is_still_named_in_the_timing_log(tmp_path):
+    from lightrag_wrapper.query_timing import QueryTiming
+
+    executor, _llm, adapter, _router = _executor()
+
+    async def query(query, **kwargs):
+        raise LightRAGAdapterError("query down", status_code=500)
+
+    adapter.query = query
+    nodes = [_node(1, "retrieve", "vacation policy", [], True)]
+    with pytest.raises(LightRAGAdapterError, match="query down"):
+        await _events(
+            executor,
+            nodes,
+            user_query="What is the vacation policy?",
+            timing=QueryTiming(query="What is the vacation policy?"),
+        )
+
+    text = (tmp_path / "times.log").read_text(encoding="utf-8")
+    retrieve = next(line for line in text.splitlines() if "retrieve 1:" in line)
+    assert retrieve.endswith("LLM response time none")
+    assert "evaluate 1:" not in text
+    assert "synthesize:" not in text

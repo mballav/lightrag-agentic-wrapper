@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import re
 import threading
+import time
 from concurrent.futures import Future, ThreadPoolExecutor
 from dataclasses import dataclass
 from pathlib import Path
@@ -16,7 +17,11 @@ from lightrag_wrapper.log import get_logger
 from lightrag_wrapper.llm.service import LLMService
 from lightrag_wrapper.models import QueryPlanNode
 from lightrag_wrapper.query_decomposer.dag_visualizer import DAGVisualizer
-from lightrag_wrapper.query_decomposer.decomposer_prompt import query_decomposer_prompt
+from lightrag_wrapper.query_timing import QueryTiming
+from lightrag_wrapper.query_decomposer.decomposer_prompt import (
+    decomposer_system_prompt,
+    decomposer_user_prompt,
+)
 
 logger = get_logger(__name__)
 
@@ -32,12 +37,6 @@ _NODE_TYPES = frozenset(
         "synthesize",
     }
 )
-
-_SYSTEM_PROMPT = (
-    "You are Query Decomposer. Follow the instructions in the user message "
-    "exactly and return only the JSON array of DAG nodes."
-)
-
 
 @dataclass(frozen=True)
 class Decomposition:
@@ -70,6 +69,8 @@ class QueryDecomposer:
         self,
         query: str,
         conversation_history: list[dict[str, str]] | None = None,
+        *,
+        timing: QueryTiming | None = None,
     ) -> Decomposition | None:
         """Return a DAG for ``query``, or None when the model output is unusable."""
         cleaned = query.strip()
@@ -77,19 +78,30 @@ class QueryDecomposer:
             return None
 
         metadata = await self._knowledge_base_metadata()
-        prompt = render_decomposer_prompt(
+        system_prompt, user_prompt = render_decomposer_prompt(
             cleaned,
             conversation_history,
             metadata,
         )
+        started = time.perf_counter()
         try:
             raw = await self._llm.complete_prompt(
-                prompt,
-                system_prompt=_SYSTEM_PROMPT
+                user_prompt,
+                system_prompt=system_prompt,
+                model=self._llm.model_high_end,
+                reasoning_effort="high",
+                max_completion_tokens=12000,
+                timeout=180,
+                num_retries=2,
             )
         except LLMServiceError as exc:
             logger.warning("Query decomposer LLM call failed", error=str(exc))
             return None
+        finally:
+            if timing is not None:
+                timing.add_decomposer_call(time.perf_counter() - started)
+
+        logger.info(f"Raw output from query decomposer: {raw}")
 
         nodes = parse_decomposition(raw if isinstance(raw, str) else str(raw))
         if nodes is None:
@@ -142,14 +154,22 @@ def render_decomposer_prompt(
     user_query: str,
     previous_messages: list[dict[str, str]] | None,
     knowledge_base_metadata: str,
-) -> str:
-    """Fill the decomposer template. Placeholders are replaced literally."""
+) -> tuple[str, str]:
+    """Fill the decomposer templates. Placeholders are replaced literally.
+
+    The first string is the stable system message, ending with the catalog.
+    The second string is the user message: previous messages, then the query.
+    """
     history = json.dumps(previous_messages or [], indent=2, ensure_ascii=False)
-    return (
-        query_decomposer_prompt.replace("{previous_messages}", history)
-        .replace("{knowledge_base_metadata}", knowledge_base_metadata)
-        .replace("{user_query}", user_query)
+    system = decomposer_system_prompt.replace(
+        "{knowledge_base_metadata}",
+        knowledge_base_metadata,
     )
+    user = decomposer_user_prompt.replace("{previous_messages}", history).replace(
+        "{user_query}",
+        user_query,
+    )
+    return system, user
 
 
 def initial_retrieve_nodes(nodes: list[QueryPlanNode]) -> list[QueryPlanNode]:
@@ -183,8 +203,10 @@ def parse_decomposition(raw: str) -> list[QueryPlanNode] | None:
         return None
     if not _dependencies_are_valid(nodes) or not _plan_structure_is_valid(nodes):
         return None
-    return _renumber_depth_first(nodes)
-
+    logger.info(f"Nodes before renumbering: {nodes}")
+    renumbered_nodes = _renumber_depth_first(nodes)
+    logger.info(f"Nodes after renumbering: {renumbered_nodes}")
+    return renumbered_nodes
 
 def _renumber_depth_first(nodes: list[QueryPlanNode]) -> list[QueryPlanNode]:
     """Assign ids 1..n in a depth-first walk from the roots.

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import time
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
 from typing import Annotated, TypedDict
@@ -18,6 +19,12 @@ from lightrag_wrapper.answer_evaluator.evaluator import (
 from lightrag_wrapper.llm.service import LLMService
 from lightrag_wrapper.log import get_logger
 from lightrag_wrapper.models import QueryMode, QueryPlanNode, QueryResult, Reference
+from lightrag_wrapper.query_timing import (
+    QueryTiming,
+    clear_reported_llm_seconds,
+    take_reported_llm_seconds,
+    write_query_times,
+)
 from lightrag_wrapper.router.query_mode import QueryModeRouter
 
 logger = get_logger(__name__)
@@ -28,11 +35,61 @@ _RESOLVE_SYSTEM_PROMPT = (
     "Return only the search string."
 )
 
-_REASON_SYSTEM_PROMPT = (
-    "You perform one operation in a retrieval plan. "
-    "Use only the parent outputs and the user query. Do not retrieve and do not invent sources. "
-    "Return only the operation result."
-)
+_REASON_OPERATIONS = {
+    "filter": "Keep only the parent evidence that meets the stated condition, and drop the rest.",
+    "transform": "Rewrite the parent evidence into the structure the operation requests, without new facts.",
+    "aggregate": (
+        "Perform the requested count, sum, difference, range, or other calculation, and show the work."
+    ),
+    "compare": (
+        "Set the parents side by side on the points the operation names. "
+        "State where they agree, where they differ, and where they conflict. "
+        "Do not merge them into one undifferentiated summary."
+    ),
+    "assemble": (
+        "Combine every parent into one artifact a later node can use without seeing those parents again. "
+        "Do not drop a parent."
+    ),
+    "evaluate": (
+        "Judge sufficiency, relevance, consistency, contradiction, or support from the parent outputs, "
+        "and state the judgment together with the evidence it uses."
+    ),
+    "synthesize": "Write the answer the operation asks for from the parent outputs.",
+}
+
+
+def _reason_system_prompt(node_type: str) -> str:
+    """Instructions for this operation only. The shared rules stay the same."""
+    operation = _REASON_OPERATIONS.get(
+        node_type,
+        "Write the output the operation asks for from the parent outputs.",
+    )
+    return (
+        "You execute exactly one operation in a retrieval plan. "
+        f"The operation is {node_type}. "
+        "Do not retrieve, search, or call a tool. Do not add, skip, or replace the operation.\n\n"
+        "You may use only three inputs: the user query, the operation text, and the parent outputs. "
+        "The parent outputs are the only evidence. "
+        "Do not add outside knowledge, and do not invent numbers, names, dates, citations, or sources. "
+        "Repeat a citation only when that parent lists it. "
+        "Keep each fact with the parent it came from.\n\n"
+        "If a parent output is empty or does not contain a fact the operation needs, "
+        "say that the fact is not in the parent outputs and name what is missing. Do not guess it. "
+        "When the operation requires arithmetic, use only numbers written in the parent outputs. "
+        "Show the inputs, each step, and the result in the output, and state any assumption. "
+        "If a required number is absent, do not produce a total.\n\n"
+        f"Write this operation's output: {operation}\n\n"
+        "When the node is a result, write the answer the user will read, in plain prose. "
+        "Lead with the answer, then the supporting detail. Do not open with a label such as \"Here is\".\n"
+        "When the node is not a result, write an intermediate artifact for the next node. "
+        "Carry forward the facts, figures, constraints, and citations that later step needs. "
+        "Do not address the user.\n\n"
+        "The message content is the node output. Write the complete output there. "
+        "Do not leave the message empty, and do not stop after planning the answer. "
+        "Do not return a status, an apology, a question, or a request for more input. "
+        "Do not wrap the output in code fences or in a JSON envelope unless the operation asks for that format. "
+        "Return only the node output."
+    )
 
 _SYNTHESIZE_SYSTEM_PROMPT = (
     "You write the user-facing answer for one retrieval result. "
@@ -78,6 +135,7 @@ class _CallContext:
     conversation_history: list[dict[str, str]] | None = None
     high_level_keywords: list[str] | None = None
     low_level_keywords: list[str] | None = None
+    timing: QueryTiming | None = None
 
 
 class PlanExecutor:
@@ -105,6 +163,7 @@ class PlanExecutor:
         conversation_history: list[dict[str, str]] | None = None,
         high_level_keywords: list[str] | None = None,
         low_level_keywords: list[str] | None = None,
+        timing: QueryTiming | None = None,
     ) -> AsyncIterator[dict]:
         """Yield each result node as soon as it finishes. Do not sort or join them."""
         context = _CallContext(
@@ -112,16 +171,21 @@ class PlanExecutor:
             conversation_history=conversation_history,
             high_level_keywords=high_level_keywords,
             low_level_keywords=low_level_keywords,
+            timing=timing,
         )
         compiled = self._compile(nodes, context)
-        async for update in compiled.astream({"artifacts": {}}, stream_mode="updates"):
-            for payload in _result_payloads(update):
-                yield payload
-        logger.info(
-            "Plan execution finished",
-            node_count=len(nodes),
-            result_count=_result_count(nodes),
-        )
+        try:
+            async for update in compiled.astream({"artifacts": {}}, stream_mode="updates"):
+                for payload in _result_payloads(update):
+                    yield payload
+            logger.info(
+                "Plan execution finished",
+                node_count=len(nodes),
+                result_count=_result_count(nodes),
+            )
+        finally:
+            if context.timing is not None:
+                write_query_times(context.timing, dag_executed=True)
 
     def _compile(self, nodes: list[QueryPlanNode], context: _CallContext):
         depended_on = {dependency for node in nodes for dependency in node.depends_on}
@@ -133,16 +197,25 @@ class PlanExecutor:
             if not dependencies:
                 graph.add_edge(START, str(node.id))
             else:
-                for dependency in dependencies:
-                    graph.add_edge(str(dependency), str(node.id))
+                # A list of start nodes waits until every parent has finished.
+                # Separate edges would start this node after the first parent.
+                graph.add_edge(
+                    [str(dependency) for dependency in dependencies],
+                    str(node.id),
+                )
             if node.id not in depended_on:
                 graph.add_edge(str(node.id), END)
         return graph.compile()
 
     def _runner(self, node: QueryPlanNode, context: _CallContext):
         async def run(state: PlanState) -> dict[str, dict[int, NodeArtifact]]:
-            artifact = await self._run_node(node, state["artifacts"], context)
-            return {"artifacts": {node.id: artifact}}
+            started = time.perf_counter()
+            try:
+                artifact = await self._run_node(node, state["artifacts"], context)
+                return {"artifacts": {node.id: artifact}}
+            finally:
+                if context.timing is not None:
+                    context.timing.add_node(time.perf_counter() - started)
 
         return run
 
@@ -165,8 +238,13 @@ class PlanExecutor:
     ) -> NodeArtifact:
         search = node.subquery
         if parents:
-            search = await self._resolve_search(node, parents)
-        mode = await self._router.route(search)
+            search = await self._timed_llm(
+                context,
+                self._resolve_search(node, parents),
+                node,
+                "resolve",
+            )
+        mode = await self._timed_llm(context, self._router.route(search), node, "route")
         logger.debug(f"Router mode: {mode}")
         attempts: list[RetrievalAttempt] = []
         retrieved = ""
@@ -174,56 +252,64 @@ class PlanExecutor:
         result: QueryResult | None = None
         extra_used = 0
         while True:
+            attempt = len(attempts) + 1
             keywords = _search_keywords(context, root=not parents, first_search=not attempts)
-            logger.debug(f"Keywords: {keywords}")
-            logger.debug(f"Subquery: {node.subquery}")
-            logger.debug(f"Context: {context}")
-            logger.debug(f"Parents: {parents}")
-            logger.debug(f"Node: {node}")
-            result = await self._adapter.query(
-                search,
-                mode=mode,
-                only_need_context=True,
-                user_prompt=None,
-                conversation_history=context.conversation_history,
-                include_references=True,
-                **keywords,
+            result = await self._timed_retrieval(
+                context,
+                self._adapter.query(
+                    search,
+                    mode=mode,
+                    only_need_context=True,
+                    user_prompt=None,
+                    conversation_history=context.conversation_history,
+                    include_references=True,
+                    **keywords,
+                ),
+                node,
+                f"retrieve {attempt}",
             )
             retrieved = result.response
             logger.debug(f"Retrieved: {retrieved}")
             last_references = list(result.references or [])
-            evaluation = await self._evaluator.evaluate(
-                subquery=node.subquery,
-                context=retrieved,
-                references=result.references,
-                parents=_upstream(parents),
-                attempts=attempts,
+            if extra_used >= self._max_extra_retrievals:
+                break
+            evaluation = await self._timed_llm(
+                context,
+                self._evaluator.evaluate(
+                    subquery=node.subquery,
+                    context=retrieved,
+                    references=result.references,
+                    parents=_upstream(parents),
+                    attempts=attempts,
+                    previous_mode=mode,
+                ),
+                node,
+                f"evaluate {attempt}",
             )
             if evaluation is None:
                 break
             attempts.append(
                 RetrievalAttempt(
-                    query=search,
                     mode=mode.value,
                     outcome=_attempt_outcome(evaluation),
                 )
             )
             if evaluation.decision != "RETRIEVE_MORE":
                 break
-            if extra_used >= self._max_extra_retrievals:
+            if evaluation.next_mode is None:
                 break
-            if evaluation.next_query is None or evaluation.next_mode is None:
-                break
-            if _repeats_search(evaluation.next_query, attempts):
-                break
-            search = evaluation.next_query
             mode = evaluation.next_mode
             extra_used += 1
 
         assert result is not None
         output = retrieved
         if node.is_result_node:
-            output = await self._synthesize(node, parents, retrieved)
+            output = await self._timed_llm(
+                context,
+                self._synthesize(node, parents, retrieved),
+                node,
+                "synthesize",
+            )
         return NodeArtifact(
             node_id=node.id,
             node_type=node.node_type,
@@ -245,6 +331,7 @@ class PlanExecutor:
         raw = await self._llm.complete_prompt(
             prompt,
             system_prompt=_RESOLVE_SYSTEM_PROMPT,
+            model=self._llm.model_cheap
         )
         resolved = _as_text(raw).strip().strip('"')
         return resolved or node.subquery
@@ -263,6 +350,8 @@ class PlanExecutor:
         raw = await self._llm.complete_prompt(
             prompt,
             system_prompt=_SYNTHESIZE_SYSTEM_PROMPT,
+            model=self._llm.model_cheap,
+            reasoning_effort="none",
         )
         return _as_text(raw).strip()
 
@@ -272,15 +361,47 @@ class PlanExecutor:
         parents: list[NodeArtifact],
         context: _CallContext,
     ) -> NodeArtifact:
+        parents_text = _format_reason_parents(parents) if parents else "None."
+        audience = (
+            "This node is a result. Write the answer the user will read."
+            if node.is_result_node
+            else "This node is not a result. Write the intermediate artifact for the next node."
+        )
         prompt = (
             f"User query:\n{context.user_query}\n\n"
-            f"Operation ({node.node_type}):\n{node.subquery}\n\n"
-            f"Parent outputs:\n{_format_parents(parents)}"
+            f"Node {node.id}\n"
+            f"Operation type: {node.node_type}\n"
+            f"{audience}\n"
+            f"Operation:\n{node.subquery}\n\n"
+            f"Parent outputs:\n{parents_text}\n\n"
+            "Write the complete node output now. "
+            "Use only the parent outputs. "
+            "If a required fact is absent, name what is missing instead of returning an empty reply."
         )
-        raw = await self._llm.complete_prompt(
-            prompt,
-            system_prompt=_REASON_SYSTEM_PROMPT,
-        )
+
+        try:
+            raw = await self._timed_llm(
+                context,
+                self._llm.complete_prompt(
+                    prompt,
+                    system_prompt=_reason_system_prompt(node.node_type),
+                    model=self._llm.model_cheap,
+                    reasoning_effort="none",
+                    max_completion_tokens=10000,
+                    timeout=180,
+                    num_retries=2,
+                ),
+                node,
+                "reason",
+            )
+        except Exception:
+            logger.exception(
+                "Reasoning call failed",
+                node_id=node.id,
+                node_type=node.node_type,
+            )
+            raise
+
         return NodeArtifact(
             node_id=node.id,
             node_type=node.node_type,
@@ -288,6 +409,63 @@ class PlanExecutor:
             output=_as_text(raw).strip(),
             references=_union_references([parent.references for parent in parents]),
             is_result_node=node.is_result_node,
+        )
+
+    async def _timed_llm(self, context: _CallContext, awaitable, node: QueryPlanNode, step: str):
+        """Time one wrapper LLM call, including network wait."""
+        clear_reported_llm_seconds()
+        started = time.perf_counter()
+        result = None
+        try:
+            result = await awaitable
+            if step == "route":
+                step = f"{step} ({result})\n({node.subquery}):\n"
+            elif step.startswith("evaluate") and result is not None:
+                step = f"{step} ({result.next_mode}):\n"
+            return result
+        finally:
+            self._record_call(
+                context,
+                node,
+                step,
+                time.perf_counter() - started,
+                take_reported_llm_seconds(),
+            )
+
+    async def _timed_retrieval(
+        self,
+        context: _CallContext,
+        awaitable,
+        node: QueryPlanNode,
+        step: str,
+    ) -> QueryResult:
+        """Time one LightRAG retrieval. Its response_time is the returned value."""
+        started = time.perf_counter()
+        reported: float | None = None
+        try:
+            result = await awaitable
+            if isinstance(result.response_time, (int, float)):
+                reported = float(result.response_time)
+            return result
+        finally:
+            self._record_call(context, node, step, time.perf_counter() - started, reported)
+
+    def _record_call(
+        self,
+        context: _CallContext,
+        node: QueryPlanNode,
+        step: str,
+        call_seconds: float,
+        response_seconds: float | None,
+    ) -> None:
+        if context.timing is None:
+            return
+        context.timing.add_dag_llm(
+            call_seconds,
+            response_seconds,
+            node_id=node.id,
+            node_type=node.node_type,
+            step=step,
         )
 
 
@@ -346,6 +524,41 @@ def _require_parent(artifacts: dict[int, NodeArtifact], dependency: int) -> Node
         return artifacts[int(dependency)]
     except KeyError as exc:
         raise RuntimeError(f"Plan node is missing the output of node {dependency}") from exc
+
+
+def _format_reason_parents(parents: list[NodeArtifact]) -> str:
+    """Parent text for a reason call.
+
+    A non-result retrieval stores the full LightRAG context. When that parent
+    also has passage text, send the passages instead of the context dump.
+    """
+    blocks: list[str] = []
+    for parent in parents:
+        passages = _passage_lines(parent.references)
+        if parent.node_type == "retrieve" and not parent.is_result_node and passages:
+            body = "\n".join(passages)
+            citations = "none"
+        else:
+            body = parent.output
+            citations = "; ".join(_format_citation(ref) for ref in parent.references) or "none"
+        blocks.append(
+            f"Node {parent.node_id} ({parent.node_type})\n"
+            f"Subquery: {parent.subquery}\n"
+            f"Output:\n{body}\n"
+            f"Citations: {citations}"
+        )
+    return "\n\n".join(blocks)
+
+
+def _passage_lines(references: list[Reference]) -> list[str]:
+    lines: list[str] = []
+    for ref in references:
+        source = ref.file_path or ref.reference_id or "unknown"
+        for chunk in ref.content or []:
+            text = chunk.strip()
+            if text:
+                lines.append(f"{source}: {text}")
+    return lines
 
 
 def _format_parents(parents: list[NodeArtifact]) -> str:

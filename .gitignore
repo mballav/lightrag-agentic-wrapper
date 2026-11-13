@@ -231,3 +231,8 @@ licenses/*
 
 data/**
 data
+scratchpad
+scatchpad/anthropic_litellm_models
+benchmark/
+benchmark
+

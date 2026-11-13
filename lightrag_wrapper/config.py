@@ -17,7 +17,7 @@ from lightrag_wrapper.models import QueryMode
 
 LightRAGMode = Literal["embedded", "server"]
 AppEnv = Literal["dev", "prod"]
-SUPPORTED_EMBEDDED_BINDINGS = frozenset({"openai", "azure_openai", "ollama"})
+SUPPORTED_EMBEDDED_BINDINGS = frozenset({"openai", "azure_openai", "ollama", "anthropic"})
 SUPPORTED_APP_ENVS = frozenset({"dev", "prod"})
 
 
@@ -175,7 +175,9 @@ class LightRAGConfig(BaseSettings):
     llm_binding: str = "openai"
     llm_binding_host: str | None = "https://api.openai.com/v1"
     llm_binding_api_key: str | None = None
-    llm_model: str = "gpt-4o-mini"
+    llm_model_cheap: str = "gpt-6-luna"
+    llm_model_mid_tier: str = "gpt-6.1-terra"
+    llm_model_high_end: str = "gpt-6.1-sol"
     llm_timeout: int = Field(default=240, ge=0)
     max_async_llm: int = Field(default=4, ge=1)
     azure_openai_api_version: str | None = None
@@ -213,8 +215,8 @@ class LightRAGConfig(BaseSettings):
     embedding_binding: str = "openai"
     embedding_binding_host: str | None = "https://api.openai.com/v1"
     embedding_binding_api_key: str | None = None
-    embedding_model: str = "text-embedding-3-large"
-    embedding_dim: int = Field(default=3072, ge=1)
+    embedding_model: str = "text-embedding-3-small"
+    embedding_dim: int = Field(default=1536, ge=1)
     embedding_token_limit: int = Field(default=8192, ge=1)
     embedding_batch_num: int = Field(default=32, ge=1)
     embedding_func_max_async: int = Field(default=8, ge=1)
@@ -225,19 +227,19 @@ class LightRAGConfig(BaseSettings):
     lightrag_graph_storage: str = "Neo4JStorage"
     lightrag_doc_status_storage: str = "PGDocStatusStorage"
 
-    postgres_host: str = "localhost"
+    postgres_host: str = "postgres"
     postgres_port: int = Field(default=5432, ge=1, le=65535)
     postgres_user: str = "rag"
     postgres_password: str | None = "rag"
     postgres_database: str = "rag"
     postgres_max_connections: int = Field(default=25, ge=1)
 
-    neo4j_uri: str = "neo4j://localhost:7687"
+    neo4j_uri: str = "neo4j://neo4j:7687"
     neo4j_username: str = "neo4j"
     neo4j_password: str | None = "neo4j@lightrag"
     neo4j_database: str = "neo4j"
 
-    milvus_uri: str = "http://localhost:19530"
+    milvus_uri: str = "http://milvus:19530"
     milvus_db_name: str = "lightrag"
     milvus_device: str = "cpu"
     milvus_user: str | None = Field(

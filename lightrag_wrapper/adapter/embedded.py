@@ -64,7 +64,7 @@ class EmbeddedLightRAGAdapter(LightRAGAdapter):
         kwargs: dict[str, Any] = {
             "working_dir": self.config.working_dir,
             "llm_model_func": self._llm.as_lightrag_llm_func(),
-            "llm_model_name": self.config.llm_model,
+            "llm_model_name": self.config.llm_model_cheap,
             "llm_model_max_async": self.config.max_async_llm,
             "embedding_func": self._llm.as_lightrag_embedding_func(
                 embedding_dim=self.config.embedding_dim,
@@ -92,7 +92,7 @@ class EmbeddedLightRAGAdapter(LightRAGAdapter):
         logger.info(
             "Embedded LightRAG initialized",
             working_dir=self.config.working_dir,
-            llm=self.config.llm_model,
+            llm=self.config.llm_model_cheap,
             embedding=self.config.embedding_model,
         )
 
@@ -214,7 +214,9 @@ class EmbeddedLightRAGAdapter(LightRAGAdapter):
         param = QueryParam(**_supported_kwargs(QueryParam, param_kwargs))
 
         try:
-            raw = await rag.aquery(query.strip(), param=param)
+            # aquery returns only the answer string. aquery_llm keeps the chunks.
+            query_call = getattr(rag, "aquery_llm", None) or rag.aquery
+            raw = await query_call(query.strip(), param=param)
         except Exception as exc:
             raise LightRAGAdapterError(f"Embedded query failed: {exc}") from exc
 
@@ -364,19 +366,53 @@ def _supported_kwargs(target: Any, kwargs: dict[str, Any]) -> dict[str, Any]:
 def _normalize_query_output(
     raw: Any, include_references: bool
 ) -> tuple[str, list[Reference] | None]:
-    references: list[Reference] | None = None
-
     if isinstance(raw, str):
         return raw, None
+    if not isinstance(raw, dict):
+        return str(raw), None
 
-    if isinstance(raw, dict):
+    llm_response = raw.get("llm_response")
+    if isinstance(llm_response, dict) and isinstance(llm_response.get("content"), str):
+        response = llm_response["content"]
+    else:
         response = raw.get("response") or raw.get("answer") or raw.get("content")
         if response is None:
             import json
 
             response = json.dumps(raw, ensure_ascii=False, default=str)
-        if include_references and raw.get("references"):
-            references = [Reference.model_validate(item) for item in raw["references"]]
-        return str(response), references
+    references = _references_from_payload(raw) if include_references else None
+    return str(response), references or None
 
-    return str(raw), None
+
+def _references_from_payload(raw: dict[str, Any]) -> list[Reference] | None:
+    """Prefer chunk text. The SDK's reference list is only an id and a file path."""
+    data = raw.get("data") if isinstance(raw.get("data"), dict) else {}
+    chunks = data.get("chunks") if isinstance(data.get("chunks"), list) else []
+    from_chunks = [_reference_from_chunk(chunk) for chunk in chunks if isinstance(chunk, dict)]
+    from_chunks = [item for item in from_chunks if item is not None]
+    if from_chunks:
+        return from_chunks
+    listed = raw.get("references")
+    if not isinstance(listed, list):
+        listed = data.get("references")
+    if not isinstance(listed, list):
+        return None
+    return [Reference.model_validate(item) for item in listed if isinstance(item, dict)] or None
+
+
+def _reference_from_chunk(chunk: dict[str, Any]) -> Reference | None:
+    content = chunk.get("content")
+    if isinstance(content, str):
+        pieces = [content] if content.strip() else []
+    elif isinstance(content, list):
+        pieces = [str(item) for item in content if str(item).strip()]
+    else:
+        pieces = []
+    reference_id = chunk.get("reference_id") or chunk.get("chunk_id")
+    if not pieces and not chunk.get("file_path") and reference_id is None:
+        return None
+    return Reference(
+        reference_id=str(reference_id) if reference_id is not None else None,
+        file_path=chunk.get("file_path"),
+        content=pieces or None,
+    )

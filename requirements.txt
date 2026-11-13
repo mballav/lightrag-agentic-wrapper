@@ -2,7 +2,7 @@ lightrag-hku==1.5.7
 asyncpg>=0.31.0,<1.0.0
 neo4j>=5.0.0,<7.0.0
 pymilvus>=2.6.2,<4.0.0
-litellm==1.100.1
+litellm==1.106.6
 tenacity>=8.2.0
 python-dotenv>=1.0.1
 pydantic-settings>=2.4.0

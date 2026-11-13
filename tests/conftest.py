@@ -12,6 +12,11 @@ FIXTURES = Path(__file__).parent / "fixtures" / "documents"
 
 
 @pytest.fixture(autouse=True)
+def _query_times_log(tmp_path, monkeypatch):
+    monkeypatch.setenv("QUERY_TIMES_LOG", str(tmp_path / "times.log"))
+
+
+@pytest.fixture(autouse=True)
 def _reset_singletons():
     import lightrag_wrapper.config as config_mod
     import lightrag_wrapper.llm.service as llm_mod

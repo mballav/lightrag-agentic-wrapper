@@ -51,6 +51,7 @@ services:
       - ${LIGHTRAG_INPUTS:-./data/server/inputs}:/app/data/inputs
       - ${WRAPPER_UPLOADS:-./data/wrapper/uploads}:/app/data/wrapper/uploads
       - ${QUERY_DAGS:-./data/query_dags}:/app/data/query_dags
+      - ${WRAPPER_LOGS:-./data/logs}:/app/data/wrapper/logs
     extra_hosts:
       - "host.docker.internal:host-gateway"
     depends_on:

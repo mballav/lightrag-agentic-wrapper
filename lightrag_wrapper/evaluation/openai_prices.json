@@ -1,0 +1,6 @@
+{
+  "gpt-6-luna": {"input": 0.10, "output": 0.50},
+  "gpt-6.1-terra": {"input": 1.00, "output": 5.00},
+  "gpt-6.1-sol": {"input": 2.00, "output": 10.00},
+  "text-embedding-3-small": {"input": 0.02, "output": 0.0}
+}

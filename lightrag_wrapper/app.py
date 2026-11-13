@@ -29,7 +29,8 @@ from lightrag_wrapper.models import (
 )
 from lightrag_wrapper.query_decomposer import QueryDecomposer
 from lightrag_wrapper.query_executor import PlanExecutor
-from lightrag_wrapper.query_rewriter import QueryRewriter
+from lightrag_wrapper.query_rewriter import QueryRewriter, RewrittenQuery
+from lightrag_wrapper.query_timing import QueryTiming, write_query_times
 from lightrag_wrapper.router import QueryModeRouter
 
 logger = get_logger(__name__)
@@ -62,6 +63,7 @@ async def lifespan(app: FastAPI):
     configure_logging(config.log_level)
     adapter = create_adapter(config)
     llm = LLMService(config)
+    fast_llm = LLMService(config)
     rewriter = QueryRewriter(llm)
     router = QueryModeRouter(llm)
     decomposer = QueryDecomposer(
@@ -236,6 +238,7 @@ async def _plan_lines(
     conversation_history: list[dict[str, str]] | None,
     high_level_keywords: list[str] | None,
     low_level_keywords: list[str] | None,
+    timing: QueryTiming | None = None,
 ) -> AsyncIterator[str]:
     try:
         async for event in executor.stream(
@@ -244,6 +247,7 @@ async def _plan_lines(
             conversation_history=conversation_history,
             high_level_keywords=high_level_keywords,
             low_level_keywords=low_level_keywords,
+            timing=timing,
         ):
             yield _ndjson(event)
     except LightRAGAdapterError as exc:
@@ -259,9 +263,22 @@ async def query(
     decomposer: QueryDecomposer = Depends(get_query_decomposer),
     executor: PlanExecutor = Depends(get_query_executor),
 ) -> StreamingResponse:
+    timing = QueryTiming(query=body.query)
     try:
-        rewritten = await rewriter.rewrite(body.query, body.conversation_history)
-        plan = await decomposer.decompose(rewritten.rewritten_query, body.conversation_history)
+        rewritten = RewrittenQuery(rewritten_query=body.query, high_level_keywords=[], low_level_keywords=[], is_context_dependent=False, ambiguities=[], confidence=0.0)
+        if body.conversation_history:
+            rewritten = await rewriter.rewrite(
+                body.query,
+                body.conversation_history,
+                timing=timing,
+            )
+        logger.info(f"Rewritten query: {rewritten.rewritten_query}")
+        plan = await decomposer.decompose(
+            rewritten.rewritten_query,
+            body.conversation_history,
+            timing=timing,
+        )
+        logger.info(f"Plan: {plan}")
         if plan is None:
             mode = await router.route(body.query)
             fallback = await adapter.query(
@@ -274,11 +291,13 @@ async def query(
                 high_level_keywords=rewritten.high_level_keywords,
                 low_level_keywords=rewritten.low_level_keywords,
             )
+            write_query_times(timing, dag_executed=False)
             return StreamingResponse(
                 _fallback_line(fallback),
                 media_type="application/x-ndjson",
             )
     except LightRAGAdapterError as exc:
+        write_query_times(timing, dag_executed=False)
         raise HTTPException(status_code=exc.status_code or 502, detail=str(exc)) from exc
 
     return StreamingResponse(
@@ -289,6 +308,7 @@ async def query(
             conversation_history=body.conversation_history,
             high_level_keywords=rewritten.high_level_keywords,
             low_level_keywords=rewritten.low_level_keywords,
+            timing=timing,
         ),
         media_type="application/x-ndjson",
     )

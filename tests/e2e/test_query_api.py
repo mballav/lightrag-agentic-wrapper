@@ -9,6 +9,9 @@ from tests.conftest import make_config
 
 
 class ScriptedLLM:
+    model_cheap = "test-cheap"
+    model_mid_tier = "test-mid"
+    model_high_end = "test-high"
     last_decomposer_prompt = None
 
     def __init__(self, config):
@@ -19,7 +22,7 @@ class ScriptedLLM:
         if "retrieval-mode router" in system:
             return '{"mode": "hybrid", "reason": "entities relate"}'
         if "Query Decomposer" in system:
-            ScriptedLLM.last_decomposer_prompt = prompt
+            ScriptedLLM.last_decomposer_prompt = system
             return (
                 '[{"Id": 1, "nodeType": "retrieve",'
                 ' "subquery": "Retrieve the Berlin annual leave accrual",'
@@ -27,7 +30,9 @@ class ScriptedLLM:
             )
         if "Evidence Evaluator" in system:
             return (
-                '{"decision": "SUFFICIENT", "missing_information": [],'
+                '{"claims": [{"claim": "Berlin leave accrual", "status": "SUPPORTED",'
+                ' "evidence_ids": ["E1"], "conflict": null}],'
+                ' "decision": "SUFFICIENT", "missing_information": [],'
                 ' "next_action": {"type": "SUFFICIENT", "purpose": null,'
                 ' "query": null, "mode": null}}'
             )
