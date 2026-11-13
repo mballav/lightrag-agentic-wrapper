@@ -70,11 +70,11 @@ class _LLM:
             if self.evaluations:
                 return self.evaluations.pop(0)
             return _decision("SUFFICIENT")
-        if "user-facing answer" in system:
+        if "provided **Context**" in system:
             if self.synthesis is not None:
                 return self.synthesis
-            subquery = prompt.split("Subquery:\n", 1)[1].split("\n", 1)[0]
-            return f"answer:{subquery}"
+            query = prompt.split("---User Query---\n", 1)[1].split("\n", 1)[0]
+            return f"answer:{query}"
         return "assembled answer"
 
 
@@ -159,7 +159,7 @@ async def test_root_result_retrieve_yields_the_synthesized_answer():
     assert "vacation policy" in evaluation[0]
     assert "[E1]" in evaluation[0]
     assert "What is the vacation policy?" not in evaluation[0]
-    synthesis = _prompts_for(llm, "user-facing answer")
+    synthesis = _prompts_for(llm, "provided **Context**")
     assert len(synthesis) == 1
     assert "What is the vacation policy?" not in synthesis[0]
     assert "evidence:vacation policy" in synthesis[0]
@@ -193,7 +193,7 @@ async def test_compare_uses_both_branches_and_does_not_search_again():
     assert {query for query, _kwargs in adapter.calls} == {"2024 policy", "2026 policy"}
     assert all(kwargs["only_need_context"] is True for _query, kwargs in adapter.calls)
     assert all(kwargs["high_level_keywords"] == ["policy"] for _query, kwargs in adapter.calls)
-    assert _prompts_for(llm, "user-facing answer") == []
+    assert _prompts_for(llm, "provided **Context**") == []
     evaluations = _prompts_for(llm, "Evidence Evaluator")
     assert len(evaluations) == 2
     assert all("Compare the 2024 and 2026 policies." not in prompt for prompt in evaluations)
@@ -261,10 +261,12 @@ async def test_dependent_result_retrieve_resolves_then_retrieves_context_once():
         "Identify the project acquired by Company X.",
         "executives who approved Project Alpha",
     ]
-    synthesis = _prompts_for(llm, "user-facing answer")
+    synthesis = _prompts_for(llm, "provided **Context**")
     assert len(synthesis) == 1
     assert "Who approved the project acquired by Company X?" not in synthesis[0]
-    assert "evidence:Identify the project acquired by Company X." in synthesis[0]
+    assert "evidence:executives who approved Project Alpha" in synthesis[0]
+    assert "Identify the project acquired by Company X..pdf" in synthesis[0]
+    assert "passage" in synthesis[0]
     assert len(events) == 1
     assert events[0]["id"] == 2
     assert events[0]["response"] == (
@@ -304,12 +306,14 @@ async def test_a_result_node_still_feeds_its_children():
     assert len(adapter.calls) == 1
     assert adapter.calls[0][1]["only_need_context"] is True
     reasoned = _prompts_for(llm, "one operation")
-    assert len(reasoned) == 1
-    assert "synthesize" in reasoned[0]
-    assert "answer:Find the policy." in reasoned[0]
+    assert reasoned == []
+    synthesized = _prompts_for(llm, "provided **Context**")
+    assert len(synthesized) == 2
+    assert "passage" in synthesized[1]
+    assert "What is the allowance?" in synthesized[1]
     assert [event["id"] for event in events] == [1, 2]
     assert events[0]["response"] == "answer:Find the policy."
-    assert events[1]["response"] == "assembled answer"
+    assert events[1]["response"] == "answer:What is the allowance?"
 
 
 async def test_a_join_waits_until_every_parent_has_finished():

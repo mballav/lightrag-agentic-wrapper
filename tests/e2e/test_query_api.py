@@ -36,7 +36,7 @@ class ScriptedLLM:
                 ' "next_action": {"type": "SUFFICIENT", "purpose": null,'
                 ' "query": null, "mode": null}}'
             )
-        if "user-facing answer" in system:
+        if "provided **Context**" in system:
             return "Employees accrue 18 days of annual leave."
         return (
             '{"rewritten_query": "Annual leave accrual for the Berlin office",'

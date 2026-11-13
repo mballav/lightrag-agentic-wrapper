@@ -134,7 +134,7 @@ class APILLM:
                 ' "next_action": {"type": "SUFFICIENT", "purpose": null,'
                 ' "query": null, "mode": null}}'
             )
-        if "user-facing answer" in system:
+        if "provided **Context**" in system:
             return "Berlin grants leave days according to the retrieved context."
         return "assembled answer"
 

@@ -91,13 +91,55 @@ def _reason_system_prompt(node_type: str) -> str:
         "Return only the node output."
     )
 
-_SYNTHESIZE_SYSTEM_PROMPT = (
-    "You write the user-facing answer for one retrieval result. "
-    "Use only the retrieved context, the subquery, and the parent outputs when they are provided. "
-    "Do not use outside knowledge and do not invent sources. "
-    "If the context does not establish the subquery, say what is missing. "
-    "Return only the answer."
-)
+_ANSWER_SYSTEM_PROMPT = """---Role---
+
+You are an expert AI assistant specializing in synthesizing information from a provided knowledge base. Your primary function is to answer the user query accurately by ONLY using the information within the provided **Context**.
+
+---Goal---
+
+Generate a comprehensive, well-structured answer to the user query.
+The answer must integrate relevant facts from the Document Chunks found in the **Context**.
+Those chunks are the retrievals this plan already fetched and assembled. Do not search again.
+
+---Instructions---
+
+1. Step-by-Step Instruction:
+  - Carefully determine the user's query intent to fully understand the user's information need.
+  - Scrutinize the `Document Chunks` in the **Context**. Identify and extract all pieces of information that are directly relevant to answering the user query.
+  - Weave the extracted facts into a coherent and logical response. Your own knowledge must ONLY be used to formulate fluent sentences and connect ideas, NOT to introduce any external information.
+  - Track the reference id of the document chunk which directly supports the facts presented in the response. Correlate that id with the entries in the `Reference Document List` to generate the appropriate citations.
+  - Generate a references section at the end of the response. Each reference document must directly support the facts presented in the response.
+  - Do not generate anything after the reference section.
+
+2. Content & Grounding:
+  - Strictly adhere to the provided context from the **Context**; DO NOT invent, assume, or infer any information not explicitly stated.
+  - If the answer cannot be found in the **Context**, state that you do not have enough information to answer. Do not attempt to guess.
+  - A note that an earlier step could not find a fact is part of the context. Keep that limit. Do not fill the gap.
+
+3. Formatting & Language:
+  - The response MUST be in the same language as the user query.
+  - The response MUST utilize Markdown formatting for enhanced clarity and structure (e.g., headings, bold text, bullet points).
+  - The response should be presented in Multiple Paragraphs.
+
+4. References Section Format:
+  - The References section should be under heading: `### References`
+  - Reference list entries should adhere to the format: `* [n] Document Title`. Do not include a caret (`^`) after opening square bracket (`[`).
+  - The Document Title in the citation must retain its original language.
+  - Output each citation on an individual line
+  - Provide maximum of 5 most relevant citations.
+  - Do not generate footnotes section or any comment, summary, or explanation after the references.
+
+5. Reference Section Example:
+```
+### References
+
+- [1] Document Title One
+- [2] Document Title Two
+- [3] Document Title Three
+```
+
+6. Additional Instructions: Use only the retrieved passages and assembled parent outputs in the Context. Do not add facts from outside those retrievals.
+"""
 
 
 @dataclass
@@ -342,14 +384,12 @@ class PlanExecutor:
         parents: list[NodeArtifact],
         retrieved: str,
     ) -> str:
-        prompt = (
-            f"Subquery:\n{node.subquery}\n\n"
-            f"Retrieved context:\n{retrieved}\n\n"
-            f"Parent outputs:\n{_format_upstream(parents)}"
-        )
+        context = retrieved.strip() or "None."
+        if parents:
+            context = f"{context}\n\n{_answer_context(parents)}"
         raw = await self._llm.complete_prompt(
-            prompt,
-            system_prompt=_SYNTHESIZE_SYSTEM_PROMPT,
+            _answer_prompt(node.subquery, context),
+            system_prompt=_ANSWER_SYSTEM_PROMPT,
             model=self._llm.model_cheap,
             reasoning_effort="none",
         )
@@ -361,35 +401,48 @@ class PlanExecutor:
         parents: list[NodeArtifact],
         context: _CallContext,
     ) -> NodeArtifact:
-        parents_text = _format_reason_parents(parents) if parents else "None."
-        audience = (
-            "This node is a result. Write the answer the user will read."
-            if node.is_result_node
-            else "This node is not a result. Write the intermediate artifact for the next node."
-        )
-        prompt = (
-            f"User query:\n{context.user_query}\n\n"
-            f"Node {node.id}\n"
-            f"Operation type: {node.node_type}\n"
-            f"{audience}\n"
-            f"Operation:\n{node.subquery}\n\n"
-            f"Parent outputs:\n{parents_text}\n\n"
-            "Write the complete node output now. "
-            "Use only the parent outputs. "
-            "If a required fact is absent, name what is missing instead of returning an empty reply."
-        )
+        if node.is_result_node and node.node_type == "synthesize":
+            prompt = _answer_prompt(context.user_query, _answer_context(parents))
+            system_prompt = _ANSWER_SYSTEM_PROMPT
+            completion_kwargs = {
+                "reasoning_effort": "none",
+                "timeout": 180,
+                "num_retries": 2,
+            }
+        else:
+            parents_text = _format_reason_parents(parents) if parents else "None."
+            audience = (
+                "This node is a result. Write the answer the user will read."
+                if node.is_result_node
+                else "This node is not a result. Write the intermediate artifact for the next node."
+            )
+            prompt = (
+                f"User query:\n{context.user_query}\n\n"
+                f"Node {node.id}\n"
+                f"Operation type: {node.node_type}\n"
+                f"{audience}\n"
+                f"Operation:\n{node.subquery}\n\n"
+                f"Parent outputs:\n{parents_text}\n\n"
+                "Write the complete node output now. "
+                "Use only the parent outputs. "
+                "If a required fact is absent, name what is missing instead of returning an empty reply."
+            )
+            system_prompt = _reason_system_prompt(node.node_type)
+            completion_kwargs = {
+                "reasoning_effort": "none",
+                "max_completion_tokens": 10000,
+                "timeout": 180,
+                "num_retries": 2,
+            }
 
         try:
             raw = await self._timed_llm(
                 context,
                 self._llm.complete_prompt(
                     prompt,
-                    system_prompt=_reason_system_prompt(node.node_type),
+                    system_prompt=system_prompt,
                     model=self._llm.model_cheap,
-                    reasoning_effort="none",
-                    max_completion_tokens=10000,
-                    timeout=180,
-                    num_retries=2,
+                    **completion_kwargs,
                 ),
                 node,
                 "reason",
@@ -490,12 +543,46 @@ def _upstream(parents: list[NodeArtifact]) -> list[UpstreamOutput]:
     ]
 
 
-def _format_upstream(parents: list[NodeArtifact]) -> str:
-    if not parents:
-        return "None."
-    return "\n\n".join(
-        f"[Upstream node {parent.node_id}, {parent.node_type}]\n{parent.output}"
-        for parent in parents
+def _answer_prompt(query: str, context: str) -> str:
+    """User message for the LightRAG answer prompt. The query is the question to answer."""
+    return f"---User Query---\n{query}\n\n---Context---\n{context}"
+
+
+def _answer_context(parents: list[NodeArtifact]) -> str:
+    """Retrieved passages in the shape LightRAG's answer prompt cites."""
+    by_title: dict[str, list[str]] = {}
+    order: list[str] = []
+    extras: list[str] = []
+    for parent in parents:
+        passages = _passage_lines(parent.references)
+        if passages:
+            for line in passages:
+                title, _, text = line.partition(": ")
+                title = title or "unknown"
+                if title not in by_title:
+                    by_title[title] = []
+                    order.append(title)
+                if text and text not in by_title[title]:
+                    by_title[title].append(text)
+        elif parent.output.strip():
+            extras.append(parent.output.strip())
+    chunks: list[str] = []
+    listing: list[str] = []
+    for index, title in enumerate(order, start=1):
+        chunks.append(f"[{index}] {title}\n" + "\n".join(by_title[title]))
+        listing.append(f"[{index}] {title}")
+    next_index = len(order) + 1
+    for extra in extras:
+        chunks.append(f"[{next_index}] Assembled from an earlier step\n{extra}")
+        listing.append(f"[{next_index}] Assembled from an earlier step")
+        next_index += 1
+    if not chunks:
+        return "Document Chunks:\n\nNone.\n\nReference Document List:\n\nNone."
+    return (
+        "Document Chunks (each [n] matches the Reference Document List):\n\n"
+        + "\n\n".join(chunks)
+        + "\n\nReference Document List:\n\n"
+        + "\n".join(listing)
     )
 
 

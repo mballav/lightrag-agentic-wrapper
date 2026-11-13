@@ -75,13 +75,17 @@ class RetrievalCounter:
         return await self._inner.query(*args, **kwargs)
 
 
-def isolated_config(base: LightRAGConfig, working_dir: Path) -> LightRAGConfig:
+def isolated_config(
+    base: LightRAGConfig,
+    working_dir: Path,
+    workspace: str = "evaluation",
+) -> LightRAGConfig:
     """Embedded settings that do not use the production working directory or workspace."""
     return base.model_copy(
         update={
             "lightrag_mode": "embedded",
             "working_dir": str(working_dir),
-            "workspace": "evaluation",
+            "workspace": workspace,
             "save_dag_visual": False,
         }
     )
@@ -358,6 +362,9 @@ async def _ingest_questions(adapter: Any, questions: list[EvalQuestion]) -> None
         await adapter.ingest_texts(texts, sources=sources, wait=True)
 
 
-async def load_isolated_config(working_dir: Path) -> LightRAGConfig:
+async def load_isolated_config(
+    working_dir: Path,
+    workspace: str = "evaluation",
+) -> LightRAGConfig:
     """Process configuration with the evaluation working directory and workspace."""
-    return isolated_config(await get_config(), working_dir)
+    return isolated_config(await get_config(), working_dir, workspace=workspace)

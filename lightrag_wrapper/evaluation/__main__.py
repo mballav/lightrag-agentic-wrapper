@@ -44,6 +44,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--working-dir",
         default=os.getenv("EVAL_WORKING_DIR", "./data/eval/rag_storage"),
     )
+    parser.add_argument("--workspace", default=os.getenv("EVAL_WORKSPACE", "evaluation"))
     return parser
 
 
@@ -61,7 +62,7 @@ async def _main(args: argparse.Namespace) -> None:
     )
     if not questions:
         raise SystemExit("No questions matched the dataset, category, and limit.")
-    config = await load_isolated_config(Path(args.working_dir))
+    config = await load_isolated_config(Path(args.working_dir), args.workspace)
     configure_logging(config.log_level)
     comparisons = await compare_questions(
         questions,
