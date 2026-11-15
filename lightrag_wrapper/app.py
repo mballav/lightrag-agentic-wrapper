@@ -28,6 +28,7 @@ from lightrag_wrapper.models import (
     TrackStatusBatchResult,
 )
 from lightrag_wrapper.query_decomposer import QueryDecomposer
+from lightrag_wrapper.query_decomposer.plan_cache import open_plan_cache
 from lightrag_wrapper.query_executor import PlanExecutor
 from lightrag_wrapper.query_rewriter import QueryRewriter, RewrittenQuery
 from lightrag_wrapper.query_timing import QueryTiming, write_query_times
@@ -61,35 +62,40 @@ class TrackStatusRequest(BaseModel):
 async def lifespan(app: FastAPI):
     config = await get_config()
     configure_logging(config.log_level)
-    adapter = create_adapter(config)
-    llm = LLMService(config)
-    fast_llm = LLMService(config)
-    rewriter = QueryRewriter(llm)
-    router = QueryModeRouter(llm)
-    decomposer = QueryDecomposer(
-        llm,
-        adapter,
-        save_dag_visual=config.save_dag_visual,
-        dag_visual_dir=config.dag_visual_dir,
-    )
-    executor = PlanExecutor(llm, adapter, router)
-    logger.info(
-        "Starting LightRAG adapter",
-        mode=config.lightrag_mode,
-        app_env=config.app_env,
-    )
-    await adapter.initialize()
-    app.state.adapter = adapter
-    app.state.config = config
-    app.state.llm = llm
-    app.state.query_rewriter = rewriter
-    app.state.query_router = router
-    app.state.query_decomposer = decomposer
-    app.state.query_executor = executor
+    plan_cache = await open_plan_cache(config)
     try:
-        yield
+        adapter = create_adapter(config)
+        llm = LLMService(config)
+        fast_llm = LLMService(config)
+        rewriter = QueryRewriter(llm)
+        router = QueryModeRouter(llm)
+        decomposer = QueryDecomposer(
+            llm,
+            adapter,
+            save_dag_visual=config.save_dag_visual,
+            dag_visual_dir=config.dag_visual_dir,
+            plan_cache=plan_cache,
+        )
+        executor = PlanExecutor(llm, adapter, router)
+        logger.info(
+            "Starting LightRAG adapter",
+            mode=config.lightrag_mode,
+            app_env=config.app_env,
+        )
+        await adapter.initialize()
+        app.state.adapter = adapter
+        app.state.config = config
+        app.state.llm = llm
+        app.state.query_rewriter = rewriter
+        app.state.query_router = router
+        app.state.query_decomposer = decomposer
+        app.state.query_executor = executor
+        try:
+            yield
+        finally:
+            await adapter.aclose()
     finally:
-        await adapter.aclose()
+        await plan_cache.aclose()
 
 
 app = FastAPI(

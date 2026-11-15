@@ -168,6 +168,15 @@ def api_app(monkeypatch, tmp_path):
     monkeypatch.setattr(app_module, "QueryModeRouter", APIRouter)
     monkeypatch.setattr(app_module, "QueryDecomposer", APIDecomposer)
 
+    class _PlanCache:
+        async def aclose(self):
+            return None
+
+    async def _open_plan_cache(config):
+        return _PlanCache()
+
+    monkeypatch.setattr(app_module, "open_plan_cache", _open_plan_cache)
+
     with TestClient(app_module.app) as client:
         yield client, holder
 

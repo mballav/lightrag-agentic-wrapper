@@ -45,6 +45,12 @@ def build_parser() -> argparse.ArgumentParser:
         default=os.getenv("EVAL_WORKING_DIR", "./data/eval/rag_storage"),
     )
     parser.add_argument("--workspace", default=os.getenv("EVAL_WORKSPACE", "evaluation"))
+    parser.add_argument(
+        "--disable-rerank",
+        action="store_true",
+        default=_bool_env("EVAL_DISABLE_RERANK", False),
+        help="Query LightRAG with enable_rerank=False.",
+    )
     return parser
 
 
@@ -62,7 +68,11 @@ async def _main(args: argparse.Namespace) -> None:
     )
     if not questions:
         raise SystemExit("No questions matched the dataset, category, and limit.")
-    config = await load_isolated_config(Path(args.working_dir), args.workspace)
+    config = await load_isolated_config(
+        Path(args.working_dir),
+        args.workspace,
+        enable_rerank=False if args.disable_rerank else None,
+    )
     configure_logging(config.log_level)
     comparisons = await compare_questions(
         questions,
@@ -99,6 +109,13 @@ async def _dataset_path(dataset: str, data: str | None) -> Path:
             "DRAGONBall is not available. Pass --data or check the download source. "
             f"({exc.__class__.__name__})"
         ) from exc
+
+
+def _bool_env(name: str, default: bool) -> bool:
+    raw = os.getenv(name)
+    if raw is None or not raw.strip():
+        return default
+    return raw.strip().lower() in {"1", "true", "yes", "on"}
 
 
 def _int_env(name: str, default: int) -> int:

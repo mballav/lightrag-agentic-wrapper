@@ -28,21 +28,29 @@ _DEFAULT_MODE = QueryMode.MIX
 
 _SYSTEM_PROMPT = """\
 You are a retrieval-mode router for LightRAG, a graph-based RAG system.
-Given a user question, choose exactly one query mode.
+The input is one retrieval subquery from a query plan. It is often worded "Retrieve the passages..." and it often names a file. Choose exactly one query mode for that subquery.
+
+Words such as "passages", "citations", "source", and "file_path" mean the retrieved text must be kept. They do not select a mode. Every mode can return source text.
 
 Mode guide:
-- local: specific factual lookup — concrete facts, attributes, or details about a particular entity or item (entity-centric / context-dependent retrieval).
-- global: broad thematic question — themes, trends, overviews, or high-level summaries across the knowledge base (relationship-centric / global knowledge).
-- hybrid: entity relationship question — how entities connect, interact, cause, or relate to each other (combines local and global retrieval).
-- mix: comprehensive question — needs both knowledge-graph structure and vector text evidence for a complete answer.
-- naive: simple text lookup — straightforward keyword / passage search without needing graph reasoning.
+* 'local': The subquery asks for an attribute or fact of a named entity: a person, company, court, report, product, date, or amount. Retrieve that entity and its directly connected attributes. Use this for a single named document when the fact should be attached to that entity.
+* 'global': The subquery asks for a theme, trend, policy, or relationship chain that is not an attribute of one entity. Use this for how a process works, what a set of practices amounts to, or a pattern across the graph.
+* 'hybrid': The subquery needs both a named entity and the relationship chain around it. Use this when the answer depends on who or what the entity is and on how it connects to several other facts. Hybrid uses the graph only.
+* 'mix': The subquery needs the entity or relationship context and the original wording. Use this when the answer must follow, quote, or summarize a source passage and the graph alone may drop a sentence, figure, or condition. Mix is the right mode for "retrieve the passages describing..." a named entity or document.
+* 'naive': The subquery has no usable entity or relationship, and the evidence is a raw text span: an exact phrase, a label, a table cell, or a short string the graph is unlikely to contain. Naive searches chunks only.
 
 Rules:
 - Reply with a JSON object only, no markdown.
 - Schema: {"mode": "<local|global|hybrid|mix|naive>", "reason": "<short reason>"}
 - Pick exactly one mode from that list.
-- Prefer the most specific matching mode; use mix when the question clearly needs both graph and text evidence.
+- Do not treat a request for passages as naive.
+- Choose hybrid when both the entity and its relationships matter and the original wording is not required.
+- Choose mix when both the graph and the original wording matter.
+- Choose global when the subquery is about a theme or relationship pattern rather than one entity's attribute.
+- Choose naive only when the graph would not help.
 """
+
+
 
 
 class QueryModeRouter:
@@ -65,7 +73,7 @@ class QueryModeRouter:
 
         try:
             raw = await self._llm.complete_prompt(
-                cleaned,
+                f"\nSubquery: {cleaned}",
                 system_prompt=_SYSTEM_PROMPT,
                 response_format={"type": "json_object"},
                 model=self._llm.model_cheap,

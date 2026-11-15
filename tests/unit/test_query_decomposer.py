@@ -155,6 +155,7 @@ class _LLM:
     async def complete_prompt(self, prompt, **kwargs):
         if isinstance(self.payload, Exception):
             raise self.payload
+        self.calls = getattr(self, "calls", 0) + 1
         self.prompt = prompt
         self.system_prompt = kwargs.get("system_prompt") or ""
         return self.payload
@@ -274,3 +275,41 @@ async def test_decompose_continues_when_the_catalog_cannot_be_loaded():
     plan = await QueryDecomposer(llm, BrokenAdapter()).decompose("How many days?")
     assert plan is not None
     assert "could not be loaded" in llm.system_prompt
+
+
+async def test_decompose_reuses_a_cached_plan_for_the_same_query():
+    payload = (
+        '[{"Id": 1, "nodeType": "retrieve", "subquery": "Retrieve the leave policy.",'
+        ' "depends_on": [], "isResultNode": true}]'
+    )
+    llm = _LLM(payload)
+    catalog_calls = {"count": 0}
+
+    class _CountingCatalog(_CatalogAdapter):
+        async def list_document_catalog(self):
+            catalog_calls["count"] += 1
+            return await super().list_document_catalog()
+
+    class _MemoryCache:
+        def __init__(self):
+            self.rows = {}
+
+        async def get(self, rewritten_query):
+            return self.rows.get(rewritten_query)
+
+        async def put(self, rewritten_query, nodes):
+            self.rows[rewritten_query] = nodes
+
+    cache = _MemoryCache()
+    decomposer = QueryDecomposer(
+        llm,
+        _CountingCatalog({"documents": []}),
+        plan_cache=cache,
+    )
+    first = await decomposer.decompose("How many days?")
+    second = await decomposer.decompose("How many days?")
+    assert first is not None and second is not None
+    assert second.nodes[0].subquery == "Retrieve the leave policy."
+    assert llm.calls == 1
+    assert catalog_calls["count"] == 1
+    assert list(cache.rows) == ["How many days?"]

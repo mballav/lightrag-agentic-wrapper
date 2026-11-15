@@ -62,11 +62,11 @@ A `RETRIEVE_MORE` action includes:
 
 Mode meanings:
 
-* `naive`: simple keyword or passage search without graph reasoning.
-* `local`: specific factual lookup — concrete facts, attributes, or details about a particular entity or item.
-* `global`: broad thematic question — themes, trends, overviews, or high-level summaries.
-* `hybrid`: how entities connect, interact, cause, or relate.
-* `mix`: both knowledge-graph structure and vector text are required.
+* 'local': Focuses on precise matching of local contexts and specific entities. It retrieves candidate entities and their directly associated attributes from the knowledge graph. This mode is suitable for Q&A targeting specific objects, concrete concepts, or detailed facts, providing highly relevant and detailed local context support.
+* 'global': Focuses on macro themes, cross-document reasoning, and deep relationships between entities. It retrieves relationship chains covering broad themes and concepts. This mode is suitable for queries that require summarization across multiple contexts, trend analysis, or understanding complex semantic dependencies.
+* 'hybrid': Merges the retrieval results of both local and global modes. It performs comprehensive reasoning and generation by simultaneously recalling specific entities and global relationship contexts.
+* 'naive': Traditional RAG retrieval based on text chunks. It does not use a knowledge graph and relies directly on vector similarity to retrieve from the original text chunks.
+* 'mix': Fully-featured mode that merges retrieval results from local, global, and naive modes to provide the most comprehensive and rich retrieval results.
 
 Mode precedence, from highest to lowest, is `mix`, then `hybrid`, then `local`, then `naive`.
 

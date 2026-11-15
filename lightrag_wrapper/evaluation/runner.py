@@ -27,6 +27,7 @@ from lightrag_wrapper.llm.service import LLMService
 from lightrag_wrapper.llm.usage import TokenUsage, begin_token_usage, take_token_usage
 from lightrag_wrapper.models import QueryMode, QueryResult
 from lightrag_wrapper.query_decomposer import QueryDecomposer
+from lightrag_wrapper.query_decomposer.plan_cache import open_plan_cache
 from lightrag_wrapper.query_executor import PlanExecutor
 from lightrag_wrapper.query_timing import QueryTiming
 from lightrag_wrapper.router import QueryModeRouter
@@ -44,6 +45,7 @@ class SystemRun:
     retrievals: int
     usages: list[TokenUsage]
     calls_by_component: dict[str, int] = field(default_factory=dict)
+    plan: list[dict[str, Any]] | None = None
     error: str | None = None
 
 
@@ -79,16 +81,23 @@ def isolated_config(
     base: LightRAGConfig,
     working_dir: Path,
     workspace: str = "evaluation",
+    *,
+    enable_rerank: bool | None = None,
 ) -> LightRAGConfig:
-    """Embedded settings that do not use the production working directory or workspace."""
-    return base.model_copy(
-        update={
-            "lightrag_mode": "embedded",
-            "working_dir": str(working_dir),
-            "workspace": workspace,
-            "save_dag_visual": False,
-        }
-    )
+    """Embedded settings that do not use the production working directory or workspace.
+
+    ``enable_rerank=False`` turns off LightRAG's reranker for every query in the run.
+    ``None`` keeps the value already on ``base``.
+    """
+    update: dict[str, Any] = {
+        "lightrag_mode": "embedded",
+        "working_dir": str(working_dir),
+        "workspace": workspace,
+        "save_dag_visual": False,
+    }
+    if enable_rerank is not None:
+        update["enable_rerank"] = enable_rerank
+    return base.model_copy(update=update)
 
 
 async def compare_questions(
@@ -102,10 +111,16 @@ async def compare_questions(
     """Ingest the sampled passages once, then compare each question."""
     adapter = RetrievalCounter(create_adapter(config))
     llm = LLMService(config)
-    await adapter.initialize()
+    plan_cache = await open_plan_cache(config)
     try:
+        await adapter.initialize()
         await _ingest_questions(adapter, questions)
-        decomposer = QueryDecomposer(llm, adapter, save_dag_visual=False)
+        decomposer = QueryDecomposer(
+            llm,
+            adapter,
+            save_dag_visual=False,
+            plan_cache=plan_cache,
+        )
         router = QueryModeRouter(llm)
         executor = PlanExecutor(llm, adapter, router)
         semaphore = asyncio.Semaphore(max(1, concurrency))
@@ -133,6 +148,7 @@ async def compare_questions(
         return list(await asyncio.gather(*[_one(question) for question in questions]))
     finally:
         await adapter.aclose()
+        await plan_cache.aclose()
 
 
 async def compare_question(
@@ -195,6 +211,7 @@ async def run_agentic(
 ) -> SystemRun:
     """The same pipeline the query API uses when there is no conversation history."""
     timing = QueryTiming(query=question.question)
+    captured_plan: dict[str, list[dict[str, Any]] | None] = {"plan": None}
 
     async def _answer() -> QueryResult:
         plan = await decomposer.decompose(question.question, None, timing=timing)
@@ -210,6 +227,7 @@ async def run_agentic(
             raw["evaluation_calls"] = _component_calls(timing)
             raw["evaluation_references"] = [item.model_dump() if hasattr(item, "model_dump") else item for item in references]
             return result.model_copy(update={"raw": raw})
+        captured_plan["plan"] = [node.model_dump(by_alias=True) for node in plan.nodes]
         parts: list[str] = []
         references: list[Any] = []
         async for event in executor.stream(
@@ -230,7 +248,9 @@ async def run_agentic(
             },
         )
 
-    return await _measured("agentic", _answer)
+    run = await _measured("agentic", _answer)
+    run.plan = captured_plan["plan"]
+    return run
 
 
 async def judge_pair(
@@ -365,6 +385,13 @@ async def _ingest_questions(adapter: Any, questions: list[EvalQuestion]) -> None
 async def load_isolated_config(
     working_dir: Path,
     workspace: str = "evaluation",
+    *,
+    enable_rerank: bool | None = None,
 ) -> LightRAGConfig:
     """Process configuration with the evaluation working directory and workspace."""
-    return isolated_config(await get_config(), working_dir, workspace=workspace)
+    return isolated_config(
+        await get_config(),
+        working_dir,
+        workspace=workspace,
+        enable_rerank=enable_rerank,
+    )

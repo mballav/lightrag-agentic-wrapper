@@ -11,7 +11,6 @@ from typing import Any
 
 from lightrag_wrapper.evaluation.judge import CRITERIA
 from lightrag_wrapper.evaluation.metrics import (
-    category_win_rates,
     criterion_rates,
     estimate_cost,
     retrieval_hit,
@@ -50,6 +49,7 @@ def comparison_row(
         "judge_usage": judge_cost,
         "native_retrieval_hit": retrieval_hit(native.references, comparison.question.supporting) if native else None,
         "agentic_retrieval_hit": retrieval_hit(agentic.references, comparison.question.supporting) if agentic else None,
+        "plan": agentic.plan if agentic else None,
         "judgments": _judgments(comparison),
         "error": comparison.error,
     }
@@ -80,8 +80,6 @@ def write_run(
 def render_report(rows: list[dict[str, Any]], *, dataset: str) -> str:
     """Human-readable summary of one run."""
     answered = [row for row in rows if not row.get("error")]
-    rates = criterion_rates(answered)
-    categories = category_win_rates(answered)
     native_latency = summarize_latencies(_numbers(answered, "native_latency_s"))
     agentic_latency = summarize_latencies(_numbers(answered, "agentic_latency_s"))
     native_hits = _hits(answered, "native_retrieval_hit")
@@ -97,7 +95,7 @@ def render_report(rows: list[dict[str, Any]], *, dataset: str) -> str:
         "",
         "## Answer quality",
         "",
-        _rate_block(rates),
+        _quality_table(answered),
         "",
         "## Retrieval",
         "",
@@ -117,18 +115,9 @@ def render_report(rows: list[dict[str, Any]], *, dataset: str) -> str:
         "",
         "Estimated cost uses the configured price map. Actual cost is present only when the provider returned one.",
         "",
-        "## Category win rates (overall)",
+        "## Examples",
         "",
     ]
-    if not categories:
-        lines.append("No category labels were available.")
-    else:
-        for category, values in categories.items():
-            lines.append(
-                f"- {category}: agentic {_percent(values['agentic'])}, "
-                f"native {_percent(values['native'])}, tie {_percent(values['tie'])}"
-            )
-    lines.extend(["", "## Examples", ""])
     lines.extend(_examples(answered))
     lines.append("")
     return "\n".join(lines)
@@ -238,16 +227,26 @@ def _percent(value: float) -> str:
     return f"{value * 100:.1f}%"
 
 
-def _rate_block(rates: dict[str, dict[str, float]]) -> str:
-    lines = []
-    for name in CRITERIA:
-        values = rates.get(name) or {"agentic": 0.0, "native": 0.0, "tie": 0.0}
-        label = "Overall" if name == "Overall" else name
-        lines.append(
-            f"- {label}: agentic {_percent(values['agentic'])}, "
-            f"native {_percent(values['native'])}, tie {_percent(values['tie'])}"
-        )
+def _quality_table(rows: list[dict[str, Any]]) -> str:
+    """Win rates for the whole run, then one block per category."""
+    header = "| | " + " | ".join(CRITERIA) + " |"
+    separator = "| --- | " + " | ".join("---" for _ in CRITERIA) + " |"
+    lines = [header, separator]
+    groups: list[tuple[str, list[dict[str, Any]]]] = [("Overall", rows)]
+    labels = sorted({str(row["category"]) for row in rows if row.get("category")})
+    for label in labels:
+        groups.append((label, [row for row in rows if row.get("category") == label]))
+    for label, group in groups:
+        lines.append("| **" + _cell(label) + "** | " + " | ".join("" for _ in CRITERIA) + " |")
+        rates = criterion_rates(group)
+        for outcome in ("agentic", "native", "tie"):
+            values = [_percent(rates[name][outcome]) for name in CRITERIA]
+            lines.append("| " + outcome + " | " + " | ".join(values) + " |")
     return "\n".join(lines)
+
+
+def _cell(value: str) -> str:
+    return value.replace("|", "\\|").replace("\n", " ")
 
 
 def _latency_line(label: str, summary: dict[str, float | None]) -> str:

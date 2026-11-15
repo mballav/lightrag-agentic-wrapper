@@ -17,6 +17,7 @@ from lightrag_wrapper.log import get_logger
 from lightrag_wrapper.llm.service import LLMService
 from lightrag_wrapper.models import QueryPlanNode
 from lightrag_wrapper.query_decomposer.dag_visualizer import DAGVisualizer
+from lightrag_wrapper.query_decomposer.plan_cache import PlanCache
 from lightrag_wrapper.query_timing import QueryTiming
 from lightrag_wrapper.query_decomposer.decomposer_prompt import (
     decomposer_system_prompt,
@@ -56,9 +57,11 @@ class QueryDecomposer:
         *,
         save_dag_visual: bool = False,
         dag_visual_dir: str | Path = "./data/query_dags",
+        plan_cache: PlanCache | None = None,
     ) -> None:
         self._llm = llm
         self._adapter = adapter
+        self._plan_cache = plan_cache
         self._save_dag_visual = save_dag_visual
         self._dag_visual_dir = dag_visual_dir
         self._dag_executor: ThreadPoolExecutor | None = None
@@ -76,6 +79,15 @@ class QueryDecomposer:
         cleaned = query.strip()
         if not cleaned:
             return None
+
+        cached = await self._cached_plan(cleaned)
+        if cached is not None:
+            logger.info(
+                "Decomposer plan cache hit",
+                node_count=len(cached),
+                query=cleaned[:120],
+            )
+            return Decomposition(nodes=cached, knowledge_base_metadata="")
 
         metadata = await self._knowledge_base_metadata()
         system_prompt, user_prompt = render_decomposer_prompt(
@@ -115,7 +127,18 @@ class QueryDecomposer:
         )
         if self._save_dag_visual:
             self._schedule_dag_visual(nodes)
+        await self._store_plan(cleaned, nodes)
         return Decomposition(nodes=nodes, knowledge_base_metadata=metadata)
+
+    async def _cached_plan(self, rewritten_query: str) -> list[QueryPlanNode] | None:
+        if self._plan_cache is None:
+            return None
+        return await self._plan_cache.get(rewritten_query)
+
+    async def _store_plan(self, rewritten_query: str, nodes: list[QueryPlanNode]) -> None:
+        if self._plan_cache is None:
+            return
+        await self._plan_cache.put(rewritten_query, nodes)
 
     def _schedule_dag_visual(self, nodes: list[QueryPlanNode]) -> None:
         """Draw the plan on one background thread and return without waiting."""

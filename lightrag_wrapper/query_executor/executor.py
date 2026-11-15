@@ -29,11 +29,34 @@ from lightrag_wrapper.router.query_mode import QueryModeRouter
 
 logger = get_logger(__name__)
 
-_RESOLVE_SYSTEM_PROMPT = (
-    "You rewrite a dependent retrieval subquery into one standalone search string. "
-    "Use only the parent outputs. Do not add facts that are not in those outputs. "
-    "Return only the search string."
-)
+_RESOLVE_SYSTEM_PROMPT = """You rewrite a dependent retrieval subquery into one standalone search string.
+
+A retriever runs that string next. It does not see the plan, the node ids, or the parent outputs. The mode router also sees only that string.
+
+The subquery asks for a fact that is still unknown. It points at something an earlier node already retrieved, such as "the person identified in Node 1". The parent outputs are retrieved passages. Use them only to learn what that reference names.
+
+Do this:
+- Take the name, title, or value in the parent outputs that the subquery's reference points to.
+- Rewrite the subquery so it asks for the same unknown fact, with that reference replaced by the concrete value.
+- Leave the requested fact open. The search string is the question, not the answer.
+
+Do not:
+- Answer the subquery, or place the sought fact in the string, even when a parent passage states it or you know it.
+- Copy passages, citation numbers, source titles, or extra parent facts into the string.
+- Add a name, date, place, or conclusion that the parent outputs do not state.
+- Mention nodes, the plan, "retrieve", "passages", "citations", or "sources".
+- Return a keyword list.
+
+If the parent outputs never identify the referenced thing, keep the subquery's own description of it. Do not invent a name.
+
+Return only the standalone search string, as one question, with no label and no explanation.
+
+Example:
+Subquery: Retrieve the birth year of the choreographer identified in Node 1.
+Parent output identifies the choreographer as Gene Kelly.
+Search string: In which year was Gene Kelly born?
+A bad string answers the question: Gene Kelly born August 23 1912 source citations.
+"""
 
 _REASON_OPERATIONS = {
     "filter": "Keep only the parent evidence that meets the stated condition, and drop the rest.",
@@ -279,6 +302,7 @@ class PlanExecutor:
         context: _CallContext,
     ) -> NodeArtifact:
         search = node.subquery
+        logger.info(f"Search: {search}")
         if parents:
             search = await self._timed_llm(
                 context,
@@ -286,8 +310,10 @@ class PlanExecutor:
                 node,
                 "resolve",
             )
-        mode = await self._timed_llm(context, self._router.route(search), node, "route")
-        logger.debug(f"Router mode: {mode}")
+        logger.info(f"Search: {search}")
+        # mode = await self._timed_llm(context, self._router.route(search), node, "route")
+        mode = QueryMode(value="mix")
+        logger.info(f"Router mode: {mode}")
         attempts: list[RetrievalAttempt] = []
         retrieved = ""
         last_references: list[Reference] = []
@@ -368,14 +394,18 @@ class PlanExecutor:
     async def _resolve_search(self, node: QueryPlanNode, parents: list[NodeArtifact]) -> str:
         prompt = (
             f"Subquery:\n{node.subquery}\n\n"
-            f"Parent outputs:\n{_format_parents(parents)}"
+            f"Parent outputs:\n{_format_parents(parents)}\n\n"
+            "Standalone search string:"
         )
         raw = await self._llm.complete_prompt(
             prompt,
             system_prompt=_RESOLVE_SYSTEM_PROMPT,
-            model=self._llm.model_cheap
+            model=self._llm.model_cheap,
+            reasoning_effort="none",
         )
+        logger.info(f"Resolved (raw): {raw}")
         resolved = _as_text(raw).strip().strip('"')
+        logger.info(f"Resolved: {resolved}")
         return resolved or node.subquery
 
     async def _synthesize(
@@ -658,6 +688,7 @@ def _format_parents(parents: list[NodeArtifact]) -> str:
             f"Output:\n{parent.output}\n"
             f"Citations: {citations}"
         )
+    logger.info(f"Parents (blocks): {blocks}")
     return "\n\n".join(blocks)
 
 

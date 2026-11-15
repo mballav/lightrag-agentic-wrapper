@@ -206,6 +206,7 @@ class EmbeddedLightRAGAdapter(LightRAGAdapter):
             "max_entity_tokens": self.config.max_entity_tokens,
             "max_relation_tokens": self.config.max_relation_tokens,
             "max_total_tokens": self.config.max_total_tokens,
+            "enable_rerank": self.config.enable_rerank,
         }
         if high_level_keywords is not None:
             param_kwargs["hl_keywords"] = high_level_keywords

@@ -187,6 +187,9 @@ def test_isolated_config_does_not_keep_the_production_workspace(tmp_path: Path):
     assert isolated.workspace == "evaluation"
     assert isolated.working_dir == str(tmp_path / "rag_storage")
     assert isolated.save_dag_visual is False
+    assert isolated.enable_rerank is True
+    disabled = isolated_config(config, tmp_path / "rag_storage", enable_rerank=False)
+    assert disabled.enable_rerank is False
 
 
 async def test_a_question_failure_does_not_raise():
@@ -239,8 +242,11 @@ def test_report_writes_json_csv_and_summary(tmp_path: Path):
     assert "q1" in summary
     payload = json.loads((output / "results.json").read_text(encoding="utf-8"))
     assert payload[0]["winners"]["Overall"] == "agentic"
+    assert payload[0]["plan"] is None
     text = render_report(payload, dataset="dragonball")
-    assert "Category win rates" in text
+    assert "| **Overall** |" in text
+    assert "| **finance** |" in text
+    assert "| agentic | 100.0% | 100.0% | 100.0% | 100.0% |" in text
 
 
 def test_overall_winner_is_accepted_as_overall():
@@ -384,14 +390,32 @@ async def test_native_and_agentic_runs_record_usage_and_retrievals():
         router=_Router(),
     )
     assert fallback.answer == "native naive"
+    assert fallback.plan is None
     assert fallback.calls_by_component["decomposer"] == 1
     assert fallback.retrievals == 1
 
     class _Planned:
         async def decompose(self, query, history, timing=None):
             timing.decomposer_calls_s.append(0.2)
+            from lightrag_wrapper.models import QueryPlanNode
+
             return Decomposition(
-                nodes=[],
+                nodes=[
+                    QueryPlanNode(
+                        id=1,
+                        node_type="retrieve",
+                        subquery="Find the fee.",
+                        depends_on=[],
+                        is_result_node=False,
+                    ),
+                    QueryPlanNode(
+                        id=2,
+                        node_type="synthesize",
+                        subquery="State the fee.",
+                        depends_on=[1],
+                        is_result_node=True,
+                    ),
+                ],
                 knowledge_base_metadata="",
             )
 
@@ -413,6 +437,22 @@ async def test_native_and_agentic_runs_record_usage_and_retrievals():
         router=_Router(),
     )
     assert planned.answer == "assembled answer"
+    assert planned.plan == [
+        {
+            "Id": 1,
+            "nodeType": "retrieve",
+            "subquery": "Find the fee.",
+            "depends_on": [],
+            "isResultNode": False,
+        },
+        {
+            "Id": 2,
+            "nodeType": "synthesize",
+            "subquery": "State the fee.",
+            "depends_on": [1],
+            "isResultNode": True,
+        },
+    ]
     assert planned.calls_by_component["reason"] == 1
     assert planned.calls_by_component["decomposer"] == 1
     assert planned.references[0]["file_path"] == "Fee"
@@ -554,7 +594,8 @@ def test_report_covers_missing_judgment_and_actual_cost():
     agentic = SystemRun("no", [], 1.0, 0, [TokenUsage("m", 1, 1, 2, actual_cost=0.2)])
     comparison = QuestionComparison(question, native, agentic, None, [], error=None)
     text = render_report([comparison_row(comparison, {})], dataset="dragonball")
-    assert "No category labels were available." in text
+    assert "| **Overall** |" in text
+    assert "**uncategorized**" not in text
     assert "actual 0.200000" in text
 
 
@@ -620,6 +661,15 @@ async def test_measured_failure_and_compare_questions(monkeypatch, tmp_path: Pat
     monkeypatch.setattr(runner, "QueryModeRouter", lambda *args, **kwargs: object())
     monkeypatch.setattr(runner, "PlanExecutor", lambda *args, **kwargs: object())
 
+    class _PlanCache:
+        async def aclose(self):
+            return None
+
+    async def _open_plan_cache(config):
+        return _PlanCache()
+
+    monkeypatch.setattr(runner, "open_plan_cache", _open_plan_cache)
+
     async def _fake(question, **kwargs):
         return QuestionComparison(question, None, None, None, [], error="stored")
 
@@ -646,7 +696,7 @@ async def test_cli_main_writes_the_three_files(tmp_path: Path, monkeypatch):
     async def _compare(questions, **kwargs):
         return [QuestionComparison(question, SystemRun("n", [], 0.2, 1, []), SystemRun("a", [], 0.3, 1, []), None, [])]
 
-    async def _config(path):
+    async def _config(path, workspace="evaluation", enable_rerank=None):
         return LightRAGConfig()
 
     monkeypatch.setattr(cli, "compare_questions", _compare)

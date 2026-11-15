@@ -30,6 +30,7 @@ class QueryParam:
     max_total_tokens: int = 1
     hl_keywords: list | None = None
     ll_keywords: list | None = None
+    enable_rerank: bool = True
 
 
 class FakeRAG:
@@ -57,6 +58,7 @@ class FakeRAG:
         self.inserted.append((documents, file_paths))
 
     async def aquery(self, query, param=None):
+        self.last_param = param
         if self.fail_query:
             raise RuntimeError("query down")
         return self.query_result
@@ -123,6 +125,7 @@ async def test_initialize_ingest_and_query(tmp_path, patched_lightrag, document_
     assert queried.response == "leave policy"
     assert queried.references[0].file_path == one.name
 
+    assert rag.last_param.enable_rerank is True
     rag.query_result = "plain"
     plain = await adapter.query("q", include_references=False)
     assert plain.response == "plain"
@@ -131,6 +134,15 @@ async def test_initialize_ingest_and_query(tmp_path, patched_lightrag, document_
     await adapter.aclose()
     await adapter.aclose()
     assert adapter._rag is None
+
+
+async def test_query_disables_rerank_when_configured(tmp_path, patched_lightrag):
+    adapter = EmbeddedLightRAGAdapter(
+        make_config(working_dir=str(tmp_path / "rag"), enable_rerank=False)
+    )
+    await adapter.initialize()
+    await adapter.query("q")
+    assert patched_lightrag["rag"].last_param.enable_rerank is False
 
 
 async def test_insert_fallback_and_failures(tmp_path, patched_lightrag):

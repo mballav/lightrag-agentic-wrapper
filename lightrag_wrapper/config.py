@@ -259,6 +259,10 @@ class LightRAGConfig(BaseSettings):
     enable_llm_cache: bool = True
 
     # --- Query defaults (also read by LightRAG QueryParam from env) ---
+    enable_rerank: bool = Field(
+        default=True,
+        description="Passed to LightRAG QueryParam.enable_rerank. False skips the reranker.",
+    )
     top_k: int = Field(default=40, ge=1)
     chunk_top_k: int = Field(default=20, ge=1)
     max_entity_tokens: int = Field(default=6000, ge=1)
