@@ -8,10 +8,15 @@ import os
 from datetime import datetime, timezone
 from pathlib import Path
 
-from lightrag_wrapper.evaluation.datasets import download_dragonball, load_dataset, select_questions
+from lightrag_wrapper.evaluation.datasets import (
+    download_dragonball,
+    load_dataset,
+    parse_question_ids,
+    select_questions,
+)
 from lightrag_wrapper.evaluation.pricing import DEFAULT_PRICES_PATH, load_prices
 from lightrag_wrapper.evaluation.report import write_run
-from lightrag_wrapper.evaluation.runner import compare_questions, load_isolated_config
+from lightrag_wrapper.evaluation.runner import compare_questions, ingest_questions, load_isolated_config
 from lightrag_wrapper.log import configure_logging
 from lightrag_wrapper.models import QueryMode
 from lightrag_wrapper.query_timing import times_log_path
@@ -28,7 +33,18 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--data", default=os.getenv("EVAL_DATA"))
     parser.add_argument("--limit", type=int, default=_int_env("EVAL_LIMIT", 15))
     parser.add_argument("--seed", type=int, default=_int_env("EVAL_SEED", 0))
+    parser.add_argument(
+        "--repeat",
+        type=int,
+        default=_int_env("EVAL_REPEAT", 1),
+        help="Run every selected question this many times after ingesting the passages once.",
+    )
     parser.add_argument("--category", default=os.getenv("EVAL_CATEGORY"))
+    parser.add_argument(
+        "--question-id",
+        default=os.getenv("EVAL_QUESTION_ID"),
+        help="Comma-separated question ids to evaluate. Ignores --limit, --seed, and --category. Unknown ids are skipped.",
+    )
     parser.add_argument("--concurrency", type=int, default=_int_env("EVAL_CONCURRENCY", 2))
     parser.add_argument("--native-mode", default=os.getenv("EVAL_NATIVE_MODE", "mix"))
     parser.add_argument("--judge-model", default=os.getenv("EVAL_JUDGE_MODEL", "gpt-6-luna"))
@@ -51,22 +67,36 @@ def build_parser() -> argparse.ArgumentParser:
         default=_bool_env("EVAL_DISABLE_RERANK", False),
         help="Query LightRAG with enable_rerank=False.",
     )
+    parser.add_argument(
+        "--ingest-only",
+        action="store_true",
+        default=_bool_env("EVAL_INGEST_ONLY", False),
+        help="Ingest every passage for the selected questions and skip evaluation.",
+    )
     return parser
 
 
 async def _main(args: argparse.Namespace) -> None:
-    stamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
-    output_dir = Path(args.output_dir) / stamp
-    output_dir.mkdir(parents=True, exist_ok=True)
-    os.environ["QUERY_TIMES_LOG"] = str(output_dir / "times.log")
     data_path = await _dataset_path(args.dataset, args.data)
+    loaded = load_dataset(args.dataset, data_path)
+    requested = parse_question_ids(args.question_id)
     questions = select_questions(
-        load_dataset(args.dataset, data_path),
+        loaded,
         category=args.category,
         limit=args.limit,
         seed=args.seed,
+        question_id=args.question_id,
     )
+    if requested:
+        found = {item.id for item in questions}
+        missing = [item for item in requested if item not in found]
+        if missing:
+            print(
+                f"Skipped question ids not found in {args.dataset}: {', '.join(missing)}"
+            )
     if not questions:
+        if requested:
+            raise SystemExit(f"No questions from the id list were found in {args.dataset}.")
         raise SystemExit("No questions matched the dataset, category, and limit.")
     config = await load_isolated_config(
         Path(args.working_dir),
@@ -74,12 +104,23 @@ async def _main(args: argparse.Namespace) -> None:
         enable_rerank=False if args.disable_rerank else None,
     )
     configure_logging(config.log_level)
+    if args.ingest_only:
+        ingested = await ingest_questions(questions, config=config)
+        print(f"Ingested {ingested} unique passages for {len(questions)} questions.")
+        return
+    if args.repeat < 1:
+        raise SystemExit("--repeat must be at least 1.")
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+    output_dir = Path(args.output_dir) / stamp
+    output_dir.mkdir(parents=True, exist_ok=True)
+    os.environ["QUERY_TIMES_LOG"] = str(output_dir / "times.log")
     comparisons = await compare_questions(
         questions,
         config=config,
         judge_model=args.judge_model,
         native_mode=QueryMode(args.native_mode),
         concurrency=args.concurrency,
+        repeats=args.repeat,
     )
     output = write_run(
         comparisons,

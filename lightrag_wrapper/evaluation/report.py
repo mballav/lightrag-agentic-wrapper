@@ -52,6 +52,7 @@ def comparison_row(
         "plan": agentic.plan if agentic else None,
         "judgments": _judgments(comparison),
         "error": comparison.error,
+        "repeat": comparison.repeat,
     }
 
 
@@ -80,52 +81,234 @@ def write_run(
 def render_report(rows: list[dict[str, Any]], *, dataset: str) -> str:
     """Human-readable summary of one run."""
     answered = [row for row in rows if not row.get("error")]
-    native_latency = summarize_latencies(_numbers(answered, "native_latency_s"))
-    agentic_latency = summarize_latencies(_numbers(answered, "agentic_latency_s"))
-    native_hits = _hits(answered, "native_retrieval_hit")
-    agentic_hits = _hits(answered, "agentic_retrieval_hit")
+    groups = _repeat_groups(answered)
+    repeat_count = len({int(row.get("repeat") or 1) for row in rows})
     lines = [
         "# Evaluation report",
         "",
         f"Recorded {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S UTC')}.",
         "",
         f"Dataset: {dataset}",
-        f"Questions evaluated: {len(rows)}",
+        f"Questions evaluated: {len({row['id'] for row in rows})}",
         f"Questions with an error: {len(rows) - len(answered)}",
-        "",
-        "## Answer quality",
-        "",
-        _quality_table(answered),
-        "",
-        "## Retrieval",
-        "",
-        f"Native supporting-passage hit rate: {_rate(native_hits)}",
-        f"Agentic supporting-passage hit rate: {_rate(agentic_hits)}",
-        "",
-        "## Latency (seconds)",
-        "",
-        _latency_line("Native", native_latency),
-        _latency_line("Agentic", agentic_latency),
-        "",
-        "## Tokens and estimated cost",
-        "",
-        _usage_line("Native", answered, "native_usage"),
-        _usage_line("Agentic", answered, "agentic_usage"),
-        _usage_line("Judge", answered, "judge_usage"),
-        "",
-        "Estimated cost uses the configured price map. Actual cost is present only when the provider returned one.",
-        "",
-        "## Examples",
-        "",
     ]
+    if repeat_count > 1:
+        lines.extend(
+            [
+                f"Repeats: {repeat_count}",
+                f"Question runs: {len(rows)}",
+                "",
+                "## Aggregated",
+                "",
+                "Pooled across every repeat.",
+                "",
+            ]
+        )
+        lines.extend(_metric_sections(answered, heading="###"))
+        lines.extend(
+            [
+                "## Average",
+                "",
+                "Mean of each figure across repeats.",
+                "",
+            ]
+        )
+        lines.extend(_average_sections(groups))
+    else:
+        lines.append("")
+        lines.extend(_metric_sections(answered, heading="##"))
+    lines.extend(
+        [
+            "Estimated cost uses the configured price map. Actual cost is present only when the provider returned one.",
+            "",
+            "## Examples",
+            "",
+        ]
+    )
     lines.extend(_examples(answered))
     lines.append("")
     return "\n".join(lines)
 
 
+def _metric_sections(rows: list[dict[str, Any]], *, heading: str) -> list[str]:
+    """Answer quality, retrieval, latency, and cost for one set of rows."""
+    native_latency = summarize_latencies(_numbers(rows, "native_latency_s"))
+    agentic_latency = summarize_latencies(_numbers(rows, "agentic_latency_s"))
+    return [
+        f"{heading} Answer quality",
+        "",
+        _quality_table(rows),
+        "",
+        f"{heading} Retrieval",
+        "",
+        f"Native supporting-passage hit rate: {_rate(_hits(rows, 'native_retrieval_hit'))}",
+        f"Agentic supporting-passage hit rate: {_rate(_hits(rows, 'agentic_retrieval_hit'))}",
+        "",
+        f"{heading} Latency (seconds)",
+        "",
+        _latency_line("Native", native_latency),
+        _latency_line("Agentic", agentic_latency),
+        "",
+        f"{heading} Tokens and estimated cost",
+        "",
+        _usage_line("Native", rows, "native_usage"),
+        _usage_line("Agentic", rows, "agentic_usage"),
+        _usage_line("Judge", rows, "judge_usage"),
+        "",
+    ]
+
+
+def _repeat_groups(rows: list[dict[str, Any]]) -> list[list[dict[str, Any]]]:
+    grouped: dict[int, list[dict[str, Any]]] = {}
+    for row in rows:
+        grouped.setdefault(int(row.get("repeat") or 1), []).append(row)
+    return [grouped[key] for key in sorted(grouped)]
+
+
+def _average_sections(groups: list[list[dict[str, Any]]]) -> list[str]:
+    """Mean of the per-repeat summaries."""
+    present = [group for group in groups if group]
+    if not present:
+        return ["No completed repeats.", ""]
+    return [
+        "### Answer quality",
+        "",
+        _averaged_quality_table(present),
+        "",
+        "### Retrieval",
+        "",
+        f"Native supporting-passage hit rate: {_mean_rate(present, 'native_retrieval_hit')}",
+        f"Agentic supporting-passage hit rate: {_mean_rate(present, 'agentic_retrieval_hit')}",
+        "",
+        "### Latency (seconds)",
+        "",
+        _latency_line("Native", _mean_latency(present, "native_latency_s")),
+        _latency_line("Agentic", _mean_latency(present, "agentic_latency_s")),
+        "",
+        "### Tokens and estimated cost",
+        "",
+        _mean_usage_line("Native", present, "native_usage"),
+        _mean_usage_line("Agentic", present, "agentic_usage"),
+        _mean_usage_line("Judge", present, "judge_usage"),
+        "",
+    ]
+
+
+def _averaged_quality_table(groups: list[list[dict[str, Any]]]) -> str:
+    """Win rates averaged across repeats, then one block per category."""
+    header = "| | " + " | ".join(CRITERIA) + " |"
+    separator = "| --- | " + " | ".join("---" for _ in CRITERIA) + " |"
+    lines = [header, separator]
+    labels = ["Overall"]
+    labels.extend(sorted({str(row["category"]) for group in groups for row in group if row.get("category")}))
+    for label in labels:
+        subsets = []
+        for group in groups:
+            subset = group if label == "Overall" else [row for row in group if row.get("category") == label]
+            if subset:
+                subsets.append(subset)
+        if not subsets:
+            continue
+        heading = f"{label} ({_count_label([len(subset) for subset in subsets])})"
+        lines.append("| **" + _cell(heading) + "** | " + " | ".join("" for _ in CRITERIA) + " |")
+        rates = [criterion_rates(subset) for subset in subsets]
+        for outcome in ("agentic", "native", "tie"):
+            values = [_percent(_mean([item[name][outcome] for item in rates])) for name in CRITERIA]
+            lines.append("| " + outcome + " | " + " | ".join(values) + " |")
+    return "\n".join(lines)
+
+
+def _count_label(sizes: list[int]) -> str:
+    if not sizes:
+        return "0"
+    if len(set(sizes)) == 1:
+        return str(sizes[0])
+    return f"avg {sum(sizes) / len(sizes):.1f}"
+
+
+def _mean(values: list[float]) -> float:
+    if not values:
+        return 0.0
+    return sum(values) / len(values)
+
+
+def _mean_rate(groups: list[list[dict[str, Any]]], key: str) -> str:
+    rates: list[float] = []
+    for group in groups:
+        values = _hits(group, key)
+        if values:
+            rates.append(sum(1 for value in values if value) / len(values))
+    if not rates:
+        return "not available"
+    return _percent(_mean(rates))
+
+
+def _mean_latency(groups: list[list[dict[str, Any]]], key: str) -> dict[str, float | None]:
+    summaries = [summarize_latencies(_numbers(group, key)) for group in groups]
+    averaged: dict[str, float | None] = {}
+    for name in ("average", "p50", "p95"):
+        values = [summary[name] for summary in summaries if isinstance(summary[name], (int, float))]
+        averaged[name] = _mean([float(value) for value in values]) if values else None
+    return averaged
+
+
+def _mean_usage_line(label: str, groups: list[list[dict[str, Any]]], key: str) -> str:
+    totals = [_usage_totals(group, key) for group in groups]
+    calls = _mean([item["calls"] for item in totals])
+    input_tokens = _mean([item["input_tokens"] for item in totals])
+    output_tokens = _mean([item["output_tokens"] for item in totals])
+    estimated_values = [item["estimated"] for item in totals if item["estimated_known"]]
+    actual_values = [item["actual"] for item in totals if item["actual_known"]]
+    per_question_values = [
+        item["estimated"] / item["count"]
+        for item in totals
+        if item["estimated_known"] and item["count"]
+    ]
+    estimated_text = f"{_mean(estimated_values):.6f}" if estimated_values else "not estimated"
+    per_question = f"{_mean(per_question_values):.6f}" if per_question_values else "not estimated"
+    actual_text = f"{_mean(actual_values):.6f}" if actual_values else "not reported"
+    return (
+        f"- {label}: calls {calls:.3f}, input tokens {input_tokens:.3f}, output tokens {output_tokens:.3f}, "
+        f"total tokens {input_tokens + output_tokens:.3f}, estimated total {estimated_text}, "
+        f"estimated per question {per_question}, actual {actual_text}"
+    )
+
+
+def _usage_totals(rows: list[dict[str, Any]], key: str) -> dict[str, float | int | bool]:
+    estimated = 0.0
+    estimated_known = False
+    actual = 0.0
+    actual_known = False
+    calls = 0
+    input_tokens = 0
+    output_tokens = 0
+    for row in rows:
+        usage = row.get(key) or {}
+        input_tokens += int(usage.get("input_tokens") or 0)
+        output_tokens += int(usage.get("output_tokens") or 0)
+        calls += int(usage.get("llm_calls") or 0)
+        if usage.get("estimated_cost") is not None:
+            estimated += float(usage["estimated_cost"])
+            estimated_known = True
+        if usage.get("actual_cost") is not None:
+            actual += float(usage["actual_cost"])
+            actual_known = True
+    return {
+        "calls": calls,
+        "input_tokens": input_tokens,
+        "output_tokens": output_tokens,
+        "estimated": estimated,
+        "estimated_known": estimated_known,
+        "actual": actual,
+        "actual_known": actual_known,
+        "count": len(rows),
+    }
+
+
 def _write_csv(path: Path, rows: list[dict[str, Any]]) -> None:
     fieldnames = [
         "id",
+        "repeat",
         "category",
         "question",
         "reference_answer",
@@ -161,6 +344,7 @@ def _write_csv(path: Path, rows: list[dict[str, Any]]) -> None:
             writer.writerow(
                 {
                     "id": row["id"],
+                    "repeat": row.get("repeat") or 1,
                     "category": row.get("category") or "",
                     "question": row["question"],
                     "reference_answer": row["reference_answer"],
@@ -237,7 +421,8 @@ def _quality_table(rows: list[dict[str, Any]]) -> str:
     for label in labels:
         groups.append((label, [row for row in rows if row.get("category") == label]))
     for label, group in groups:
-        lines.append("| **" + _cell(label) + "** | " + " | ".join("" for _ in CRITERIA) + " |")
+        heading = f"{label} ({len(group)})"
+        lines.append("| **" + _cell(heading) + "** | " + " | ".join("" for _ in CRITERIA) + " |")
         rates = criterion_rates(group)
         for outcome in ("agentic", "native", "tie"):
             values = [_percent(rates[name][outcome]) for name in CRITERIA]

@@ -63,7 +63,16 @@ class _LLM:
         system = kwargs.get("system_prompt") or ""
         self.system_prompts.append(system)
         if "standalone search string" in system:
-            return self.resolved
+            text = self.resolved.strip()
+            if not text:
+                return "{}"
+            return (
+                '{"standalone_search": "'
+                + text.replace('"', '\\"')
+                + '", "grand_search": "grand: '
+                + text.replace('"', '\\"')
+                + '"}'
+            )
         if "Evidence Evaluator" in system:
             if self.fail_evaluator:
                 raise LLMServiceError("evaluator down")
@@ -131,6 +140,21 @@ def _prompts_for(llm, marker):
 
 async def _events(executor, nodes, **kwargs):
     return [event async for event in executor.stream(nodes, **kwargs)]
+
+
+async def test_execution_writes_resolved_subqueries_back_onto_the_plan():
+    executor, _llm, _adapter, _router = _executor()
+    nodes = [
+        _node(1, "retrieve", "Find the policy.", [], False),
+        _node(2, "retrieve", "Find the allowance named in Node 1.", [1], False),
+        _node(3, "synthesize", "State the allowance.", [2], True),
+    ]
+
+    await _events(executor, nodes, user_query="What is the allowance?")
+
+    assert nodes[0].subquery == "Find the policy."
+    assert nodes[1].subquery == "grand: executives who approved Project Alpha"
+    assert nodes[2].subquery == "grand: executives who approved Project Alpha"
 
 
 async def test_root_result_retrieve_yields_the_synthesized_answer():
@@ -603,6 +627,11 @@ async def test_stream_logs_resolve_follow_up_and_synthesize(tmp_path):
     node_1, node_2 = text.split("Node 2 (retrieve)", 1)
     assert "Node 1 (retrieve)" in node_1
     assert "resolve:" not in node_1
+    assert "resolved query:" not in node_1
+    assert (
+        "resolved query: standalone: executives who approved Project Alpha | "
+        "grand: grand: executives who approved Project Alpha"
+    ) in node_2
     assert "synthesize:" not in node_1
     assert (
         node_2.index("resolve:")
@@ -639,3 +668,57 @@ async def test_a_failed_retrieval_is_still_named_in_the_timing_log(tmp_path):
     assert retrieve.endswith("LLM response time none")
     assert "evaluate 1:" not in text
     assert "synthesize:" not in text
+
+
+def test_answer_context_keeps_parent_knowledge_graph():
+    from lightrag_wrapper.query_executor.executor import NodeArtifact, _answer_context
+
+    parent = NodeArtifact(
+        node_id=1,
+        node_type="retrieve",
+        subquery="which newspaper sponsors the initiative",
+        output=(
+            "Knowledge Graph Data (Entity):\n\n```json\n"
+            '{"entity": "Beena Sarwar", "description": "Pakistan Editor of Aman ki Asha"}\n'
+            "```\n\n"
+            "Knowledge Graph Data (Relationship):\n\n```json\n"
+            '{"src": "Aman ki Asha", "tgt": "Daily Jang", "description": "co-sponsored by the Jang Group"}\n'
+            "```\n\n"
+            "Document Chunks:\n\nignored because references exist\n"
+        ),
+        references=[
+            Reference(
+                reference_id="1",
+                file_path="Beena Sarwar",
+                content=["Pakistan Editor of Aman ki Asha"],
+            )
+        ],
+        is_result_node=False,
+    )
+    context = _answer_context([parent])
+    assert "Knowledge Graph Data (Entity):" in context
+    assert "Pakistan Editor of Aman ki Asha" in context
+    assert "Knowledge Graph Data (Relationship):" in context
+    assert "co-sponsored by the Jang Group" in context
+    assert "[1] Beena Sarwar" in context
+    assert "ignored because references exist" not in context
+
+
+def test_answer_context_without_passages_keeps_the_parent_output_once():
+    from lightrag_wrapper.query_executor.executor import NodeArtifact, _answer_context
+
+    parent = NodeArtifact(
+        node_id=1,
+        node_type="retrieve",
+        subquery="find the city",
+        output=(
+            "Knowledge Graph Data (Entity):\n\n```json\n"
+            '{"entity": "Daily Jang"}\n'
+            "```"
+        ),
+        references=[],
+        is_result_node=False,
+    )
+    context = _answer_context([parent])
+    assert context.count("Knowledge Graph Data (Entity):") == 1
+    assert '{"entity": "Daily Jang"}' in context

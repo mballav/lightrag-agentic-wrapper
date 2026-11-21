@@ -20,6 +20,7 @@ from lightrag_wrapper.exceptions import LLMServiceError
 from lightrag_wrapper.log import get_logger
 from lightrag_wrapper.llm.usage import note_token_usage
 from lightrag_wrapper.query_timing import note_reported_llm_seconds
+from lightrag_wrapper.tracing import apply_call_tracing, apply_litellm_tracing
 
 logger = get_logger(__name__)
 
@@ -105,6 +106,8 @@ _RETRYABLE_TYPE_NAMES = frozenset(
 def _import_litellm() -> Any:
     try:
         import litellm
+
+        apply_litellm_tracing(litellm)
     except ImportError as exc:
         raise LLMServiceError(
             "litellm is required for LLMService. Install it from requirements.txt."
@@ -205,7 +208,7 @@ class LLMService:
         )
         self._model_cheap = model_cheap or (config.llm_model_cheap if config else "gpt-6-luna")
         self._model_mid_tier = model_mid_tier or (config.llm_model_mid_tier if config else "gpt-6.1-terra")
-        self._model_high_end = model_high_end or (config.llm_model_high_end if config else "gpt-6.1-sol")
+        self._model_high_end = model_high_end or (config.llm_model_high_end if config else "gpt-6.2-sol")
         self._embedding_model = embedding_model or (
             config.embedding_model if config else "text-embedding-3-small"
         )
@@ -696,6 +699,7 @@ class LLMService:
         if self._api_version and "api_version" not in prepared:
             prepared["api_version"] = self._api_version
 
+        apply_call_tracing(prepared)
         return prepared
 
     async def _execute(

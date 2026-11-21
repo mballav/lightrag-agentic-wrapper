@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+import re
 import time
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
@@ -26,21 +28,29 @@ from lightrag_wrapper.query_timing import (
     write_query_times,
 )
 from lightrag_wrapper.router.query_mode import QueryModeRouter
+from lightrag_wrapper.tracing import langgraph_callbacks
 
 logger = get_logger(__name__)
 
-_RESOLVE_SYSTEM_PROMPT = """You rewrite a dependent retrieval subquery into one standalone search string.
+_RESOLVE_SYSTEM_PROMPT = """You rewrite a dependent retrieval subquery into one standalone search string and a grand search string.
 
-A retriever runs that string next. It does not see the plan, the node ids, or the parent outputs. The mode router also sees only that string.
+A retriever runs the grand search string next. It does not see the entire execution plan.
 
 The subquery asks for a fact that is still unknown. It points at something an earlier node already retrieved, such as "the person identified in Node 1". The parent outputs are retrieved passages. Use them only to learn what that reference names.
 
-Do this:
+The grand search string is a search string that is more specific than the standalone search string. The grand search string is the current subquery combined with the parent subqueries and outputs. The grand search string is the question, not the answer.
+
+Do this for the standalone search string:
 - Take the name, title, or value in the parent outputs that the subquery's reference points to.
 - Rewrite the subquery so it asks for the same unknown fact, with that reference replaced by the concrete value.
-- Leave the requested fact open. The search string is the question, not the answer.
+- Leave the requested fact open. The standalone search string is the question, not the answer.
 
-Do not:
+Do this for the grand search string:
+- Combine the current subquery with the parent subqueries and outputs.
+- Leave the requested fact open. The grand search string is the question, not the answer.
+- **Do not** leave out any details from the parent subqueries. The final grand search string should be a consolidated question.
+
+For both the standalone search string and the grand search string, do not:
 - Answer the subquery, or place the sought fact in the string, even when a parent passage states it or you know it.
 - Copy passages, citation numbers, source titles, or extra parent facts into the string.
 - Add a name, date, place, or conclusion that the parent outputs do not state.
@@ -49,13 +59,40 @@ Do not:
 
 If the parent outputs never identify the referenced thing, keep the subquery's own description of it. Do not invent a name.
 
-Return only the standalone search string, as one question, with no label and no explanation.
+Return JSON containing standalone search string and grand search string in the following format:
+{
+    "standalone_search": "In which year was Gene Kelly born?",
+    "grand_search": "In which year was Gene Kelly who performed the ballet "Swan Lake" born?"
+}
 
-Example:
-Subquery: Retrieve the birth year of the choreographer identified in Node 1.
+Examples:
+
+Example 1:
+Current Subquery: Retrieve the birth year of the choreographer identified in Node 1.
+Parent subqueries: 
+Node 1: Subquery: Retrieve the name of the choreographer who performed the ballet "Swan Lake".
+
 Parent output identifies the choreographer as Gene Kelly.
-Search string: In which year was Gene Kelly born?
-A bad string answers the question: Gene Kelly born August 23 1912 source citations.
+
+Output:
+{
+    "standalone_search": "In which year was Gene Kelly born?",
+    "grand_search": "In which year was Gene Kelly who performed the ballet "Swan Lake" born?"
+}
+
+Example 2:
+Current Subquery: Retrieve a county that shares a border with the county containing the city identified in Node 2, in the state identified in Node 1.
+Parent subqueries:
+Node 1: Subquery: Retrieve the state where Washington State Prison is located.
+Node 2: Subquery: Retrieve the most populous city in the state identified in Node 1 and the county containing that city.
+
+Parent outputs identify the state as Georgia, the most populous city as Atlanta, and Atlanta's county as Fulton County. They do not name a bordering county.
+
+Output:
+{
+    "standalone_search": "Which county in Georgia shares a border with Fulton County?",
+    "grand_search": "Washington State Prison is located in Georgia, and Atlanta is the most populous city in Georgia. Atlanta is in Fulton County. Which county in Georgia shares a border with Fulton County?"
+}
 """
 
 _REASON_OPERATIONS = {
@@ -66,8 +103,8 @@ _REASON_OPERATIONS = {
     ),
     "compare": (
         "Set the parents side by side on the points the operation names. "
-        "State where they agree, where they differ, and where they conflict. "
-        "Do not merge them into one undifferentiated summary."
+        "Analyze where they agree, where they differ, and where they conflict. "
+        "Finally, merge them into one undifferentiated summary while answering the subquery presented in the current node with all the details."
     ),
     "assemble": (
         "Combine every parent into one artifact a later node can use without seeing those parents again. "
@@ -121,15 +158,15 @@ You are an expert AI assistant specializing in synthesizing information from a p
 ---Goal---
 
 Generate a comprehensive, well-structured answer to the user query.
-The answer must integrate relevant facts from the Document Chunks found in the **Context**.
-Those chunks are the retrievals this plan already fetched and assembled. Do not search again.
+The answer must integrate relevant facts from the Knowledge Graph and Document Chunks found in the **Context**.
+Those retrievals are the ones this plan already fetched and assembled. Do not search again.
 
 ---Instructions---
 
 1. Step-by-Step Instruction:
   - Carefully determine the user's query intent to fully understand the user's information need.
-  - Scrutinize the `Document Chunks` in the **Context**. Identify and extract all pieces of information that are directly relevant to answering the user query.
-  - Weave the extracted facts into a coherent and logical response. Your own knowledge must ONLY be used to formulate fluent sentences and connect ideas, NOT to introduce any external information.
+  - Scrutinize both `Knowledge Graph Data` and `Document Chunks` in the **Context**. Identify and extract all pieces of information that are directly relevant to answering the user query.
+  - Weave the extracted facts into a coherent and logical response. Your own knowledge must ONLY be used to formulate fluent sentences and connect ideas, NOT to introduce any external information (from any outside sources).
   - Track the reference id of the document chunk which directly supports the facts presented in the response. Correlate that id with the entries in the `Reference Document List` to generate the appropriate citations.
   - Generate a references section at the end of the response. Each reference document must directly support the facts presented in the response.
   - Do not generate anything after the reference section.
@@ -161,7 +198,12 @@ Those chunks are the retrievals this plan already fetched and assembled. Do not 
 - [3] Document Title Three
 ```
 
-6. Additional Instructions: Use only the retrieved passages and assembled parent outputs in the Context. Do not add facts from outside those retrievals.
+6. Additional Instructions: 
+   - Use only the knowledge graph data, retrieved passages, and assembled parent outputs in the Context. 
+   - Do not add facts from outside those retrievals. 
+   - You may add relevant and additional facts taken from the knowledge graph data, retrieved passages, and parent outputs if they will make the answer more complete and informative.
+   - You **must** repeat phrases or information from the user query to make the answer more complete and informative.
+   - If the context does not contain the information, you **must** state that you do not have enough information to answer. Please also justify logically why the answer cannot be deduced from the context. In such a case, if part of the question can be answered, make sure to include that answer as well.
 """
 
 
@@ -240,7 +282,15 @@ class PlanExecutor:
         )
         compiled = self._compile(nodes, context)
         try:
-            async for update in compiled.astream({"artifacts": {}}, stream_mode="updates"):
+            graph_config: dict = {}
+            callbacks = langgraph_callbacks()
+            if callbacks:
+                graph_config["callbacks"] = callbacks
+            async for update in compiled.astream(
+                {"artifacts": {}},
+                stream_mode="updates",
+                config=graph_config,
+            ):
                 for payload in _result_payloads(update):
                     yield payload
             logger.info(
@@ -302,18 +352,19 @@ class PlanExecutor:
         context: _CallContext,
     ) -> NodeArtifact:
         search = node.subquery
-        logger.info(f"Search: {search}")
+        grand_search = None
         if parents:
-            search = await self._timed_llm(
+            standalone_search, grand_search = await self._timed_llm(
                 context,
                 self._resolve_search(node, parents),
                 node,
                 "resolve",
             )
-        logger.info(f"Search: {search}")
+            search = standalone_search
+
+        logger.info(f"Search: {search} | Grand search: {grand_search}")
         # mode = await self._timed_llm(context, self._router.route(search), node, "route")
-        mode = QueryMode(value="mix")
-        logger.info(f"Router mode: {mode}")
+        mode = QueryMode.MIX
         attempts: list[RetrievalAttempt] = []
         retrieved = ""
         last_references: list[Reference] = []
@@ -325,7 +376,7 @@ class PlanExecutor:
             result = await self._timed_retrieval(
                 context,
                 self._adapter.query(
-                    search,
+                    grand_search or search,
                     mode=mode,
                     only_need_context=True,
                     user_prompt=None,
@@ -337,14 +388,13 @@ class PlanExecutor:
                 f"retrieve {attempt}",
             )
             retrieved = result.response
-            logger.debug(f"Retrieved: {retrieved}")
             last_references = list(result.references or [])
             if extra_used >= self._max_extra_retrievals:
                 break
             evaluation = await self._timed_llm(
                 context,
                 self._evaluator.evaluate(
-                    subquery=node.subquery,
+                    subquery=grand_search or search,
                     context=retrieved,
                     references=result.references,
                     parents=_upstream(parents),
@@ -374,14 +424,15 @@ class PlanExecutor:
         if node.is_result_node:
             output = await self._timed_llm(
                 context,
-                self._synthesize(node, parents, retrieved),
+                self._synthesize(parents, retrieved, search, grand_search),
                 node,
                 "synthesize",
             )
+        node.subquery = grand_search or search
         return NodeArtifact(
             node_id=node.id,
             node_type=node.node_type,
-            subquery=node.subquery,
+            subquery=grand_search or search,
             output=output,
             references=_union_references(
                 [parent.references for parent in parents] + [last_references]
@@ -391,34 +442,41 @@ class PlanExecutor:
             response_time=result.response_time,
         )
 
-    async def _resolve_search(self, node: QueryPlanNode, parents: list[NodeArtifact]) -> str:
+    async def _resolve_search(
+        self,
+        node: QueryPlanNode,
+        parents: list[NodeArtifact],
+    ) -> tuple[str, str]:
         prompt = (
             f"Subquery:\n{node.subquery}\n\n"
+            f"Parent subqueries:\n{_format_subqueries(parents)}\n\n"
             f"Parent outputs:\n{_format_parents(parents)}\n\n"
-            "Standalone search string:"
+            "Return the JSON object with standalone_search and grand_search."
         )
         raw = await self._llm.complete_prompt(
             prompt,
             system_prompt=_RESOLVE_SYSTEM_PROMPT,
             model=self._llm.model_cheap,
             reasoning_effort="none",
+            response_format={"type": "json_object"},
         )
-        logger.info(f"Resolved (raw): {raw}")
-        resolved = _as_text(raw).strip().strip('"')
-        logger.info(f"Resolved: {resolved}")
-        return resolved or node.subquery
+        standalone_search, grand_search = _resolved_searches(_as_text(raw), node.subquery)
+        logger.info(f"Resolved standalone: {standalone_search}")
+        logger.info(f"Resolved grand: {grand_search}")
+        return standalone_search, grand_search
 
     async def _synthesize(
         self,
-        node: QueryPlanNode,
         parents: list[NodeArtifact],
         retrieved: str,
+        search: str,
+        grand_search: str | None,
     ) -> str:
         context = retrieved.strip() or "None."
         if parents:
             context = f"{context}\n\n{_answer_context(parents)}"
         raw = await self._llm.complete_prompt(
-            _answer_prompt(node.subquery, context),
+            _answer_prompt(grand_search or search, context),
             system_prompt=_ANSWER_SYSTEM_PROMPT,
             model=self._llm.model_cheap,
             reasoning_effort="none",
@@ -431,8 +489,20 @@ class PlanExecutor:
         parents: list[NodeArtifact],
         context: _CallContext,
     ) -> NodeArtifact:
+        search = node.subquery
+        grand_search = None
+        if parents:
+            standalone_search, grand_search = await self._timed_llm(
+                context,
+                self._resolve_search(node, parents),
+                node,
+                "resolve",
+            )
+            search = standalone_search
+
+        logger.info(f"Search: {search} | Grand search: {grand_search}")
         if node.is_result_node and node.node_type == "synthesize":
-            prompt = _answer_prompt(context.user_query, _answer_context(parents))
+            prompt = _answer_prompt(grand_search or search, _answer_context(parents))
             system_prompt = _ANSWER_SYSTEM_PROMPT
             completion_kwargs = {
                 "reasoning_effort": "none",
@@ -447,7 +517,7 @@ class PlanExecutor:
                 else "This node is not a result. Write the intermediate artifact for the next node."
             )
             prompt = (
-                f"User query:\n{context.user_query}\n\n"
+                f"User query:\n{grand_search or search}\n\n"
                 f"Node {node.id}\n"
                 f"Operation type: {node.node_type}\n"
                 f"{audience}\n"
@@ -485,6 +555,7 @@ class PlanExecutor:
             )
             raise
 
+        node.subquery = grand_search or search
         return NodeArtifact(
             node_id=node.id,
             node_type=node.node_type,
@@ -499,10 +570,17 @@ class PlanExecutor:
         clear_reported_llm_seconds()
         started = time.perf_counter()
         result = None
+        detail = None
         try:
             result = await awaitable
             if step == "route":
                 step = f"{step} ({result})\n({node.subquery}):\n"
+            elif step == "resolve" and isinstance(result, tuple) and len(result) == 2:
+                standalone_search, grand_search = result
+                detail = (
+                    f"standalone: {' '.join(str(standalone_search).split())} | "
+                    f"grand: {' '.join(str(grand_search).split())}"
+                )
             elif step.startswith("evaluate") and result is not None:
                 step = f"{step} ({result.next_mode}):\n"
             return result
@@ -513,6 +591,7 @@ class PlanExecutor:
                 step,
                 time.perf_counter() - started,
                 take_reported_llm_seconds(),
+                detail,
             )
 
     async def _timed_retrieval(
@@ -540,6 +619,7 @@ class PlanExecutor:
         step: str,
         call_seconds: float,
         response_seconds: float | None,
+        detail: str | None = None,
     ) -> None:
         if context.timing is None:
             return
@@ -549,6 +629,7 @@ class PlanExecutor:
             node_id=node.id,
             node_type=node.node_type,
             step=step,
+            detail=detail,
         )
 
 
@@ -578,14 +659,41 @@ def _answer_prompt(query: str, context: str) -> str:
     return f"---User Query---\n{query}\n\n---Context---\n{context}"
 
 
+_KG_SECTION = re.compile(
+    r"Knowledge Graph Data \((Entity|Relationship)\):\s*```(?:json)?\s*(.*?)```",
+    re.IGNORECASE | re.DOTALL,
+)
+
+
+def _knowledge_graph_text(output: str) -> tuple[str, str]:
+    """Entity and relationship JSON from a LightRAG context string."""
+    entities: list[str] = []
+    relations: list[str] = []
+    for match in _KG_SECTION.finditer(output):
+        body = match.group(2).strip()
+        if not body:
+            continue
+        target = entities if match.group(1).lower() == "entity" else relations
+        if body not in target:
+            target.append(body)
+    return "\n".join(entities), "\n".join(relations)
+
+
 def _answer_context(parents: list[NodeArtifact]) -> str:
-    """Retrieved passages in the shape LightRAG's answer prompt cites."""
+    """Passages plus each parent's knowledge-graph blocks, in LightRAG's shape."""
     by_title: dict[str, list[str]] = {}
     order: list[str] = []
     extras: list[str] = []
+    entity_blocks: list[str] = []
+    relation_blocks: list[str] = []
     for parent in parents:
         passages = _passage_lines(parent.references)
         if passages:
+            entities, relations = _knowledge_graph_text(parent.output)
+            if entities and entities not in entity_blocks:
+                entity_blocks.append(entities)
+            if relations and relations not in relation_blocks:
+                relation_blocks.append(relations)
             for line in passages:
                 title, _, text = line.partition(": ")
                 title = title or "unknown"
@@ -607,13 +715,29 @@ def _answer_context(parents: list[NodeArtifact]) -> str:
         listing.append(f"[{next_index}] Assembled from an earlier step")
         next_index += 1
     if not chunks:
-        return "Document Chunks:\n\nNone.\n\nReference Document List:\n\nNone."
-    return (
-        "Document Chunks (each [n] matches the Reference Document List):\n\n"
-        + "\n\n".join(chunks)
-        + "\n\nReference Document List:\n\n"
-        + "\n".join(listing)
-    )
+        chunk_section = "Document Chunks:\n\nNone.\n\nReference Document List:\n\nNone."
+    else:
+        chunk_section = (
+            "Document Chunks (each [n] matches the Reference Document List):\n\n"
+            + "\n\n".join(chunks)
+            + "\n\nReference Document List:\n\n"
+            + "\n".join(listing)
+        )
+    sections: list[str] = []
+    if entity_blocks:
+        sections.append(
+            "Knowledge Graph Data (Entity):\n\n```json\n"
+            + "\n".join(entity_blocks)
+            + "\n```"
+        )
+    if relation_blocks:
+        sections.append(
+            "Knowledge Graph Data (Relationship):\n\n```json\n"
+            + "\n".join(relation_blocks)
+            + "\n```"
+        )
+    sections.append(chunk_section)
+    return "\n\n".join(sections)
 
 
 def _attempt_outcome(evaluation: Evaluation) -> str:
@@ -678,17 +802,25 @@ def _passage_lines(references: list[Reference]) -> list[str]:
     return lines
 
 
+def _format_subqueries(parents: list[NodeArtifact]) -> str:
+    blocks: list[str] = []
+    for parent in parents:
+        blocks.append(
+            f"Node {parent.node_id}: Subquery: {parent.subquery}\n"
+        )
+    logger.info(f"Parent Subqueries (blocks): {blocks}")
+    return "\n\n".join(blocks)
+
 def _format_parents(parents: list[NodeArtifact]) -> str:
     blocks: list[str] = []
     for parent in parents:
         citations = "; ".join(_format_citation(ref) for ref in parent.references) or "none"
         blocks.append(
             f"Node {parent.node_id} ({parent.node_type})\n"
-            f"Subquery: {parent.subquery}\n"
             f"Output:\n{parent.output}\n"
             f"Citations: {citations}"
         )
-    logger.info(f"Parents (blocks): {blocks}")
+    # logger.info(f"Parents (blocks): {blocks}")
     return "\n\n".join(blocks)
 
 
@@ -737,3 +869,41 @@ def _result_payloads(update: object) -> list[dict]:
 
 def _as_text(raw: object) -> str:
     return raw if isinstance(raw, str) else str(raw)
+
+
+def _resolved_searches(raw: str, fallback: str) -> tuple[str, str]:
+    """Read both search strings. A missing value falls back to the subquery."""
+    data = _json_object(raw)
+    standalone = _search_field(data, "standalone_search")
+    grand = _search_field(data, "grand_search")
+    standalone = standalone or fallback
+    return standalone, grand or standalone
+
+
+def _search_field(data: dict[str, object] | None, key: str) -> str:
+    if not data:
+        return ""
+    value = data.get(key)
+    if not isinstance(value, str):
+        return ""
+    return " ".join(value.split())
+
+
+def _json_object(text: str) -> dict[str, object] | None:
+    cleaned = text.strip()
+    if cleaned.startswith("```"):
+        cleaned = re.sub(r"^```(?:json)?\s*", "", cleaned)
+        cleaned = re.sub(r"\s*```$", "", cleaned)
+    try:
+        data = json.loads(cleaned)
+        return data if isinstance(data, dict) else None
+    except json.JSONDecodeError:
+        pass
+    match = re.search(r"\{.*\}", cleaned, flags=re.DOTALL)
+    if not match:
+        return None
+    try:
+        data = json.loads(match.group(0))
+    except json.JSONDecodeError:
+        return None
+    return data if isinstance(data, dict) else None

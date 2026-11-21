@@ -39,6 +39,7 @@ services:
       - env/stack/prod/neo4j.env
       - env/stack/prod/milvus.env
       - env/lightrag-config/.env.prod
+      # LANGFUSE_TRACING_ENABLED in this file toggles LiteLLM and LangGraph tracing.
       - env/wrapper/.env.prod
     environment:
       <<: *container-env

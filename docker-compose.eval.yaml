@@ -1,0 +1,280 @@
+# Development stack: wrapper API (embedded LightRAG by default) plus the
+# standalone LightRAG server for local testing. WebUI: http://127.0.0.1:9621
+# Storage backends: Postgres (KV + doc status), Milvus (vectors), Neo4j+Bloom (graph).
+# The production stack is docker-compose.prod.yaml.
+#
+# Configuration lives in env files, selected by dev vs prod:
+#   env/stack/dev/*.env         one credential file per data service
+#   env/lightrag-config/.env.*  LightRAG: models, endpoints, parser, indexing
+#   env/wrapper/.env.*          wrapper process: mode, HTTP, paths, upload dir
+# Later files override earlier ones. Compose `environment` below only replaces
+# hostnames and paths that differ inside the Docker network.
+#
+# ${APP_PORT} and the other ${...} host bindings read a project `.env` or the
+# shell. They do not read the env files above.
+#
+# Host data paths (Compose interpolation):
+#   EMBEDDED_RAG_STORAGE=/path/on/host/embedded-rag-storage
+#   EMBEDDED_INPUTS=/path/on/host/embedded-inputs
+#   LIGHTRAG_RAG_STORAGE=/path/on/host/server-rag-storage
+#   LIGHTRAG_INPUTS=/path/on/host/server-inputs
+#   WRAPPER_UPLOADS=/path/on/host/wrapper-uploads
+#   QUERY_DAGS=/path/on/host/query-dags
+#   NEO4J_LICENSES=/path/on/host/neo4j-licenses   # optional Bloom license file dir
+version: '3.5'
+
+x-container-env: &container-env
+  APP_HOST: 0.0.0.0
+  POSTGRES_HOST: postgres
+  NEO4J_URI: neo4j://neo4j:7687
+  MILVUS_URI: http://milvus:19530
+  DOCLING_ENDPOINT: http://docling:5001
+  WORKING_DIR: /app/data/rag_storage
+  INPUT_DIR: /app/data/inputs
+  WRAPPER_UPLOAD_DIR: /app/data/wrapper/uploads
+
+x-milvus-image: &milvus-image milvusdb/milvus:v3.0.3
+
+services:
+  # app:
+  #   build: .
+  #   ports:
+  #     - "${APP_PORT:-8000}:8000"
+  #   env_file:
+  #     - env/stack/dev/postgres.env
+  #     - env/stack/dev/neo4j.env
+  #     - env/stack/dev/milvus.env
+  #     - env/lightrag-config/.env.dev
+  #     # LANGFUSE_TRACING_ENABLED in this file toggles LiteLLM and LangGraph tracing.
+  #     - env/wrapper/.env.dev
+  #   environment:
+  #     <<: *container-env
+  #     LIGHTRAG_SERVER_URL: http://lightrag:9621
+  #     DAG_VISUAL_DIR: /app/data/query_dags
+  #   volumes:
+  #     - ${EMBEDDED_RAG_STORAGE:-./data/embedded/rag_storage}:/app/data/rag_storage
+  #     - ${EMBEDDED_INPUTS:-./data/embedded/inputs}:/app/data/inputs
+  #     - ${WRAPPER_UPLOADS:-./data/wrapper/uploads}:/app/data/wrapper/uploads
+  #     - ${QUERY_DAGS:-./data/query_dags}:/app/data/query_dags
+  #     - ${WRAPPER_CODE_FOLDER:-./lightrag_wrapper}:/app/lightrag_wrapper
+  #     - ${WRAPPER_LOGS:-./data/logs}:/app/data/wrapper/logs
+  #   extra_hosts:
+  #     - "host.docker.internal:host-gateway"
+  #   depends_on:
+  #     lightrag:
+  #       condition: service_healthy
+  #     docling:
+  #       condition: service_healthy
+  #     postgres:
+  #       condition: service_healthy
+  #     neo4j:
+  #       condition: service_healthy
+  #     milvus:
+  #       condition: service_healthy
+  #   restart: unless-stopped
+
+  # lightrag:
+  #   image: ghcr.io/hkuds/lightrag:latest
+  #   ports:
+  #     - "127.0.0.1:${LIGHTRAG_PORT:-9621}:9621"
+  #   env_file:
+  #     - env/stack/dev/postgres.env
+  #     - env/stack/dev/neo4j.env
+  #     - env/stack/dev/milvus.env
+  #     - env/lightrag-config/.env.dev
+  #   environment:
+  #     <<: *container-env
+  #   volumes:
+  #     - ${LIGHTRAG_RAG_STORAGE:-./data/server/rag_storage}:/app/data/rag_storage
+  #     - ${LIGHTRAG_INPUTS:-./data/server/inputs}:/app/data/inputs
+  #   extra_hosts:
+  #     - "host.docker.internal:host-gateway"
+  #   depends_on:
+  #     docling:
+  #       condition: service_healthy
+  #     postgres:
+  #       condition: service_healthy
+  #     neo4j:
+  #       condition: service_healthy
+  #     milvus:
+  #       condition: service_healthy
+  #   healthcheck:
+  #     test:
+  #       [
+  #         "CMD-SHELL",
+  #         "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:9621/health')\"",
+  #       ]
+  #     interval: 10s
+  #     timeout: 5s
+  #     retries: 12
+  #     start_period: 60s
+  #   restart: unless-stopped
+
+  docling:
+    image: ghcr.io/docling-project/docling-serve-cpu:latest
+    ports:
+      - "127.0.0.1:${DOCLING_PORT:-5001}:5001"
+    environment:
+      DOCLING_SERVE_ENABLE_UI: "false"
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:5001/health')\"",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 40
+      start_period: 180s
+    restart: unless-stopped
+
+  postgres:
+    image: postgres:16-bookworm
+    ports:
+      - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
+    env_file:
+      - env/stack/dev/postgres.env
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$$POSTGRES_USER\" -d \"$$POSTGRES_DB\""]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 15s
+    restart: unless-stopped
+
+  neo4j:
+    image: neo4j:5-enterprise
+    ports:
+      - "127.0.0.1:${NEO4J_HTTP_PORT:-7474}:7474"
+      - "127.0.0.1:${NEO4J_BOLT_PORT:-7687}:7687"
+    env_file:
+      - env/stack/dev/neo4j.env
+    environment:
+      NEO4J_ACCEPT_LICENSE_AGREEMENT: ${NEO4J_ACCEPT_LICENSE_AGREEMENT:-eval}
+      NEO4J_PLUGINS: '["bloom"]'
+      NEO4J_dbms_security_procedures_unrestricted: bloom.*
+      NEO4J_dbms_security_procedures_allowlist: bloom.*
+      NEO4J_dbms_default__database: neo4j
+      NEO4J_server_memory_heap_initial__size: 512m
+      NEO4J_server_memory_heap_max__size: 1G
+      NEO4J_server_memory_pagecache_size: 512m
+    volumes:
+      - neo4j_data:/data
+      - neo4j_plugins:/plugins
+      - ${NEO4J_LICENSES:-./licenses}:/licenses
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "wget -q --spider http://127.0.0.1:7474 || exit 1",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+      start_period: 60s
+    restart: unless-stopped
+
+  milvus-volume-init:
+    image: *milvus-image
+    user: "0:0"
+    network_mode: none
+    read_only: true
+    restart: "no"
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        set -eu
+        uid="$$(id -u milvus)"
+        gid="$$(id -g milvus)"
+        marker="/var/lib/milvus/.milvus-volume-owner-$${uid}-$${gid}"
+        if [ ! -e "$${marker}" ]; then
+          echo "Preparing /var/lib/milvus for $${uid}:$${gid}"
+          chown -R "$${uid}:$${gid}" /var/lib/milvus
+          touch "$${marker}"
+          chown "$${uid}:$${gid}" "$${marker}"
+        fi
+    volumes:
+      - milvus_data:/var/lib/milvus
+
+  milvus:
+    image: *milvus-image
+    command: ["milvus", "run", "standalone"]
+    security_opt:
+    - seccomp:unconfined
+    env_file:
+      - env/stack/dev/milvus.env
+      - env/stack/dev/minio.env
+    environment:
+      ETCD_ENDPOINTS: milvus-etcd:2379
+      MINIO_ADDRESS: milvus-minio:9000
+    volumes:
+      - milvus_data:/var/lib/milvus
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9091/healthz"]
+      interval: 30s
+      start_period: 90s
+      timeout: 20s
+      retries: 3
+    ports:
+      - "19530:19530"
+      - "9091:9091"
+    depends_on:
+      milvus-volume-init:
+        condition: service_completed_successfully
+      milvus-etcd:
+        condition: service_healthy
+      milvus-minio:
+        condition: service_healthy
+    restart: unless-stopped
+
+  milvus-etcd:
+    image: quay.io/coreos/etcd:v3.5.25
+    environment:
+      - ETCD_AUTO_COMPACTION_MODE=revision
+      - ETCD_AUTO_COMPACTION_RETENTION=1000
+      - ETCD_QUOTA_BACKEND_BYTES=4294967296
+      - ETCD_SNAPSHOT_COUNT=50000
+    volumes:
+      - milvus-etcd_data:/etcd
+    command: >
+      etcd
+      -advertise-client-urls=http://0.0.0.0:2379
+      -listen-client-urls=http://0.0.0.0:2379
+      -data-dir /etcd
+    healthcheck:
+      test: ["CMD", "etcdctl", "endpoint", "health"]
+      interval: 20s
+      timeout: 20s
+      retries: 5
+    restart: unless-stopped
+
+  milvus-minio:
+    image: milvusdb/minio:RELEASE.2024-12-18T13-15-44Z
+    env_file:
+      - env/stack/dev/minio.env
+    ports:
+      - "9001:9001"
+      - "9000:9000"
+    volumes:
+      - milvus-minio_data:/minio_data
+    command: minio server /minio_data --console-address ":9001"
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 30s
+      timeout: 20s
+      retries: 3
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  neo4j_data:
+  neo4j_plugins:
+  milvus_data:
+  milvus-etcd_data:
+  milvus-minio_data:
+
+networks:
+  default:
+    name: rag-network

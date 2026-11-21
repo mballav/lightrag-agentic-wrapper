@@ -136,6 +136,24 @@ async def test_initialize_ingest_and_query(tmp_path, patched_lightrag, document_
     assert adapter._rag is None
 
 
+async def test_ingest_suppresses_langfuse_for_the_insert(tmp_path, patched_lightrag):
+    from lightrag_wrapper.tracing import langfuse_suppressed
+
+    adapter = EmbeddedLightRAGAdapter(make_config(working_dir=str(tmp_path / "rag"), workspace="ws"))
+    await adapter.initialize()
+    rag = patched_lightrag["rag"]
+    seen: dict[str, bool] = {}
+
+    async def _ainsert(documents, file_paths=None):
+        seen["during"] = langfuse_suppressed()
+        rag.inserted.append((documents, file_paths))
+
+    rag.ainsert = _ainsert
+    await adapter.ingest_texts(["A passage."], sources=["passage.txt"])
+    assert seen["during"] is True
+    assert langfuse_suppressed() is False
+
+
 async def test_query_disables_rerank_when_configured(tmp_path, patched_lightrag):
     adapter = EmbeddedLightRAGAdapter(
         make_config(working_dir=str(tmp_path / "rag"), enable_rerank=False)

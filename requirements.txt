@@ -15,3 +15,8 @@ fastapi>=0.115.0
 uvicorn[standard]>=0.32.0
 python-multipart>=0.0.12
 matplotlib>=3.9.0
+langfuse
+langchain
+opentelemetry-api
+opentelemetry-sdk
+opentelemetry-exporter-otlp

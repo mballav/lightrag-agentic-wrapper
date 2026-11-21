@@ -52,14 +52,37 @@ def load_dataset(name: str, path: str | Path) -> list[EvalQuestion]:
     return _load_musique(payload)
 
 
+def parse_question_ids(question_id: str | None) -> list[str]:
+    """Split a comma-separated id list. Blank entries and repeats are dropped."""
+    if not question_id or not question_id.strip():
+        return []
+    seen: list[str] = []
+    for part in question_id.split(","):
+        item = part.strip()
+        if item and item not in seen:
+            seen.append(item)
+    return seen
+
+
 def select_questions(
     questions: list[EvalQuestion],
     *,
     category: str | None = None,
     limit: int | None = None,
     seed: int = 0,
+    question_id: str | None = None,
 ) -> list[EvalQuestion]:
-    """Filter by category, then take a deterministic sample."""
+    """Filter by category, then take a deterministic sample.
+
+    A comma-separated question id list selects those questions, in that order,
+    and ignores category, limit, and seed. Ids that are not in the dataset are skipped.
+    """
+    wanted = parse_question_ids(question_id)
+    if wanted:
+        by_id: dict[str, EvalQuestion] = {}
+        for item in questions:
+            by_id.setdefault(item.id, item)
+        return [by_id[item] for item in wanted if item in by_id]
     chosen = list(questions)
     if category:
         folded = category.casefold()

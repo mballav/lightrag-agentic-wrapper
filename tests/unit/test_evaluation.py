@@ -110,6 +110,12 @@ def test_sampling_is_stable_for_a_seed():
     assert [item.id for item in first] == [item.id for item in second]
     assert len(first) == 2
     assert {item.category for item in first} == {"finance"}
+    only = select_questions(questions, question_id="1", category="finance", limit=0, seed=9)
+    assert [item.id for item in only] == ["1"]
+    listed = select_questions(questions, question_id="5, missing, 1, 5")
+    assert [item.id for item in listed] == ["5", "1"]
+    assert select_questions(questions, question_id="missing, also") == []
+    assert select_questions(questions, question_id="  ") == select_questions(questions, limit=None)
 
 
 def test_judge_requires_agreement_across_both_orders():
@@ -244,8 +250,8 @@ def test_report_writes_json_csv_and_summary(tmp_path: Path):
     assert payload[0]["winners"]["Overall"] == "agentic"
     assert payload[0]["plan"] is None
     text = render_report(payload, dataset="dragonball")
-    assert "| **Overall** |" in text
-    assert "| **finance** |" in text
+    assert "| **Overall (1)** |" in text
+    assert "| **finance (1)** |" in text
     assert "| agentic | 100.0% | 100.0% | 100.0% | 100.0% |" in text
 
 
@@ -273,7 +279,7 @@ def test_prices_skip_incomplete_entries(tmp_path: Path):
     bundled = load_prices(None)
     assert bundled["gpt-6-luna"] == {"input": 0.10, "output": 0.50}
     assert bundled["gpt-6.1-terra"]["output"] == 5.00
-    assert bundled["gpt-6.1-sol"]["input"] == 2.00
+    assert bundled["gpt-6.2-sol"]["input"] == 2.00
     assert bundled["text-embedding-3-small"] == {"input": 0.02, "output": 0.0}
     luna = estimate_cost(
         [TokenUsage("openai/gpt-6-luna", 1_000_000, 1_000_000, 2_000_000)],
@@ -425,6 +431,7 @@ async def test_native_and_agentic_runs_record_usage_and_retrievals():
 
         async def stream(self, nodes, *, user_query, timing=None):
             timing.dag_calls.append(DagCall(1, "synthesize", "reason", 0.4, 0.3))
+            nodes[1].subquery = "What is the fee?"
             yield {
                 "response": "assembled answer",
                 "references": [{"file_path": "Fee", "content": ["The fee is 18."]}],
@@ -444,13 +451,15 @@ async def test_native_and_agentic_runs_record_usage_and_retrievals():
             "subquery": "Find the fee.",
             "depends_on": [],
             "isResultNode": False,
+            "original_subquery": "Find the fee.",
         },
         {
             "Id": 2,
             "nodeType": "synthesize",
-            "subquery": "State the fee.",
+            "subquery": "What is the fee?",
             "depends_on": [1],
             "isResultNode": True,
+            "original_subquery": "State the fee.",
         },
     ]
     assert planned.calls_by_component["reason"] == 1
@@ -594,9 +603,55 @@ def test_report_covers_missing_judgment_and_actual_cost():
     agentic = SystemRun("no", [], 1.0, 0, [TokenUsage("m", 1, 1, 2, actual_cost=0.2)])
     comparison = QuestionComparison(question, native, agentic, None, [], error=None)
     text = render_report([comparison_row(comparison, {})], dataset="dragonball")
-    assert "| **Overall** |" in text
+    assert "| **Overall (1)** |" in text
     assert "**uncategorized**" not in text
     assert "actual 0.200000" in text
+
+
+def test_repeated_report_shows_aggregated_and_average_metrics():
+    rows = [
+        {
+            "id": "q",
+            "category": "2hop",
+            "question": "What?",
+            "repeat": 1,
+            "winners": {name: "agentic" for name in ("Comprehensiveness", "Diversity", "Empowerment", "Overall")},
+            "native_latency_s": 1.0,
+            "agentic_latency_s": 2.0,
+            "native_retrieval_hit": True,
+            "agentic_retrieval_hit": True,
+            "native_usage": {"input_tokens": 10, "output_tokens": 1, "llm_calls": 1, "estimated_cost": 0.1, "actual_cost": 0.1},
+            "agentic_usage": {"input_tokens": 20, "output_tokens": 2, "llm_calls": 2, "estimated_cost": 0.2, "actual_cost": 0.2},
+            "judge_usage": {"input_tokens": 5, "output_tokens": 1, "llm_calls": 2, "estimated_cost": 0.05, "actual_cost": 0.05},
+            "native_answer": "a native answer long enough to count",
+            "agentic_answer": "an agentic answer long enough to count",
+        },
+        {
+            "id": "q",
+            "category": "2hop",
+            "question": "What?",
+            "repeat": 2,
+            "winners": {name: "tie" for name in ("Comprehensiveness", "Diversity", "Empowerment", "Overall")},
+            "native_latency_s": 3.0,
+            "agentic_latency_s": 4.0,
+            "native_retrieval_hit": False,
+            "agentic_retrieval_hit": True,
+            "native_usage": {"input_tokens": 30, "output_tokens": 3, "llm_calls": 3, "estimated_cost": 0.3, "actual_cost": 0.3},
+            "agentic_usage": {"input_tokens": 40, "output_tokens": 4, "llm_calls": 4, "estimated_cost": 0.4, "actual_cost": 0.4},
+            "judge_usage": {"input_tokens": 5, "output_tokens": 1, "llm_calls": 2, "estimated_cost": 0.05, "actual_cost": 0.05},
+            "native_answer": "a native answer long enough to count",
+            "agentic_answer": "an agentic answer long enough to count",
+        },
+    ]
+    text = render_report(rows, dataset="musique")
+    assert "Repeats: 2" in text
+    assert "Question runs: 2" in text
+    assert "Questions evaluated: 1" in text
+    aggregated, average = text.split("## Average", 1)
+    assert "calls 4" in aggregated
+    assert "calls 2.000" in average
+    assert "| agentic | 50.0% | 50.0% | 50.0% | 50.0% |" in aggregated
+    assert "| agentic | 50.0% | 50.0% | 50.0% | 50.0% |" in average
 
 
 async def test_question_errors_and_a_bad_judge_are_kept():
@@ -681,6 +736,25 @@ async def test_measured_failure_and_compare_questions(monkeypatch, tmp_path: Pat
     assert adapter.texts == ["text"]
     assert runner.RetrievalCounter(adapter).extra() == "kept"
 
+    adapter.ingest_calls = 0
+    original_ingest = adapter.ingest_texts
+
+    async def _counting_ingest(texts, sources=None, wait=True):
+        adapter.ingest_calls += 1
+        return await original_ingest(texts, sources=sources, wait=wait)
+
+    adapter.ingest_texts = _counting_ingest
+    repeated = await runner.compare_questions(
+        [question],
+        config=config,
+        judge_model="judge",
+        repeats=2,
+    )
+    assert adapter.ingest_calls == 1
+    assert [item.repeat for item in repeated] == [1, 2]
+    with pytest.raises(ValueError):
+        await runner.compare_questions([question], config=config, judge_model="judge", repeats=0)
+
 
 async def test_cli_main_writes_the_three_files(tmp_path: Path, monkeypatch):
     from lightrag_wrapper.evaluation import __main__ as cli
@@ -709,6 +783,140 @@ async def test_cli_main_writes_the_three_files(tmp_path: Path, monkeypatch):
     reports = list((tmp_path / "runs").glob("*/report.md"))
     assert len(reports) == 1
     assert "Dataset: dragonball" in reports[0].read_text(encoding="utf-8")
+
+
+async def test_cli_question_id_runs_that_question_only(tmp_path: Path, monkeypatch, capsys):
+    from lightrag_wrapper.evaluation import __main__ as cli
+    from lightrag_wrapper.evaluation.runner import QuestionComparison
+
+    data = tmp_path / "dragon.json"
+    data.write_text(
+        json.dumps(
+            [
+                {"id": "d1", "question": "What?", "answer": "18", "domain": "finance", "doc": "The fee is 18."},
+                {"id": "d2", "question": "Who?", "answer": "Ann", "domain": "law", "doc": "Ann signed it."},
+            ]
+        ),
+        encoding="utf-8",
+    )
+    seen: list[str] = []
+
+    async def _compare(questions, **kwargs):
+        seen.extend(item.id for item in questions)
+        return [
+            QuestionComparison(item, SystemRun("n", [], 0.2, 1, []), SystemRun("a", [], 0.3, 1, []), None, [])
+            for item in questions
+        ]
+
+    async def _config(path, workspace="evaluation", enable_rerank=None):
+        return LightRAGConfig()
+
+    monkeypatch.setattr(cli, "compare_questions", _compare)
+    monkeypatch.setattr(cli, "load_isolated_config", _config)
+    monkeypatch.setattr(cli, "configure_logging", lambda level: None)
+    args = cli.build_parser().parse_args(
+        [
+            "--dataset",
+            "dragonball",
+            "--data",
+            str(data),
+            "--question-id",
+            "d2, absent, d1",
+            "--limit",
+            "0",
+            "--output-dir",
+            str(tmp_path / "runs"),
+        ]
+    )
+    await cli._main(args)
+    assert seen == ["d2", "d1"]
+    assert "absent" in capsys.readouterr().out
+    missing = cli.build_parser().parse_args(
+        ["--dataset", "dragonball", "--data", str(data), "--question-id", "absent,gone", "--output-dir", str(tmp_path / "runs")]
+    )
+    with pytest.raises(SystemExit, match="No questions from the id list"):
+        await cli._main(missing)
+
+
+async def test_cli_ingest_only_skips_evaluation(tmp_path: Path, monkeypatch, capsys):
+    from lightrag_wrapper.evaluation import __main__ as cli
+
+    data = tmp_path / "dragon.json"
+    data.write_text(
+        json.dumps(
+            [
+                {"id": "d1", "question": "What?", "answer": "18", "domain": "finance", "doc": "The fee is 18."},
+                {"id": "d2", "question": "Who?", "answer": "Ann", "domain": "law", "doc": "Ann signed it."},
+            ]
+        ),
+        encoding="utf-8",
+    )
+    seen: list[str] = []
+
+    async def _ingest(questions, *, config):
+        seen.extend(item.id for item in questions)
+        return 3
+
+    async def _compare(*args, **kwargs):
+        raise AssertionError("evaluation should not run")
+
+    async def _config(path, workspace="evaluation", enable_rerank=None):
+        return LightRAGConfig()
+
+    monkeypatch.setattr(cli, "ingest_questions", _ingest)
+    monkeypatch.setattr(cli, "compare_questions", _compare)
+    monkeypatch.setattr(cli, "load_isolated_config", _config)
+    monkeypatch.setattr(cli, "configure_logging", lambda level: None)
+    args = cli.build_parser().parse_args(
+        [
+            "--dataset",
+            "dragonball",
+            "--data",
+            str(data),
+            "--limit",
+            "1",
+            "--seed",
+            "0",
+            "--ingest-only",
+            "--output-dir",
+            str(tmp_path / "runs"),
+        ]
+    )
+    await cli._main(args)
+    assert seen == ["d2"]
+    assert "Ingested 3 unique passages for 1 questions." in capsys.readouterr().out
+    assert list((tmp_path / "runs").glob("*/report.md")) == []
+
+
+async def test_ingest_questions_sends_unique_passages(monkeypatch):
+    from lightrag_wrapper.evaluation import runner
+
+    shared = Passage("Fee", "The fee is 18.")
+    questions = [
+        EvalQuestion("a", "Q", "18", None, (shared,), (shared,)),
+        EvalQuestion("b", "Q2", "18", None, (shared,), (shared, Passage("Cap", "The cap is 50."))),
+    ]
+
+    class _Adapter:
+        def __init__(self):
+            self.texts = None
+            self.closed = False
+
+        async def initialize(self):
+            return None
+
+        async def ingest_texts(self, texts, sources=None, wait=True):
+            self.texts = list(texts)
+
+        async def aclose(self):
+            self.closed = True
+
+    adapter = _Adapter()
+    monkeypatch.setattr(runner, "create_adapter", lambda config: adapter)
+    count = await runner.ingest_questions(questions, config=LightRAGConfig())
+    assert count == 2
+    assert adapter.texts == ["The fee is 18.", "The cap is 50."]
+    assert adapter.closed is True
 
 
 def test_cli_int_env(monkeypatch):

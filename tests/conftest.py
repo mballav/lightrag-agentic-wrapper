@@ -14,6 +14,7 @@ FIXTURES = Path(__file__).parent / "fixtures" / "documents"
 @pytest.fixture(autouse=True)
 def _query_times_log(tmp_path, monkeypatch):
     monkeypatch.setenv("QUERY_TIMES_LOG", str(tmp_path / "times.log"))
+    monkeypatch.setenv("LANGFUSE_TRACING_ENABLED", "false")
 
 
 @pytest.fixture(autouse=True)

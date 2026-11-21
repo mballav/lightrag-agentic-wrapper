@@ -54,7 +54,14 @@ def test_report_puts_the_query_first_and_lists_each_pre_dag_call():
 
 def test_report_lists_each_dag_call_under_its_node():
     timing = QueryTiming(query="How many leave days?")
-    timing.add_dag_llm(0.4, 0.3, node_id=2, node_type="assemble", step="reason")
+    timing.add_dag_llm(
+        0.4,
+        0.3,
+        node_id=2,
+        node_type="assemble",
+        step="resolve",
+        detail="Where is the Harris Museum located?",
+    )
     timing.add_dag_llm(0.2, None, node_id=1, node_type="retrieve", step="route")
     timing.add_dag_llm(1.5, 1.0, node_id=1, node_type="retrieve", step="retrieve 1")
     timing.add_dag_llm(0.3, 0.25, node_id=1, node_type="retrieve", step="evaluate 1")
@@ -72,7 +79,8 @@ def test_report_lists_each_dag_call_under_its_node():
     assert "retrieve 1: LLM call time 1.500 s, LLM response time 1.000 s" in node_1
     assert "evaluate 1: LLM call time 0.300 s, LLM response time 0.250 s" in node_1
     assert "retrieve 2: LLM call time 0.800 s, LLM response time none" in node_1
-    assert "reason: LLM call time 0.400 s, LLM response time 0.300 s" in node_2
+    assert "resolve: LLM call time 0.400 s, LLM response time 0.300 s" in node_2
+    assert "resolved query: Where is the Harris Museum located?" in node_2
     assert "LLM call time: 3.200 s (5 calls)" in text
     assert "LLM response time: 1.550 s (3 of 5 calls returned a response_time)" in text
 

@@ -101,6 +101,13 @@ def test_validators_and_properties():
         )
 
 
+def test_langfuse_tracing_enabled_reads_the_env_var(monkeypatch):
+    monkeypatch.setenv("LANGFUSE_TRACING_ENABLED", "true")
+    assert LightRAGConfig(app_env="dev", lightrag_mode="embedded").langfuse_tracing_enabled is True
+    monkeypatch.setenv("LANGFUSE_TRACING_ENABLED", "false")
+    assert LightRAGConfig(app_env="dev", lightrag_mode="embedded").langfuse_tracing_enabled is False
+
+
 def test_save_dag_visual_reads_the_env_var(monkeypatch):
     monkeypatch.setenv("SAVE_DAG_VISUAL", "true")
     monkeypatch.setenv("DAG_VISUAL_DIR", "/app/data/query_dags")

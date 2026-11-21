@@ -17,8 +17,8 @@ from lightrag_wrapper.adapter._status import document_status_from_sdk
 from lightrag_wrapper.adapter.base import LightRAGAdapter
 from lightrag_wrapper.config import LightRAGConfig
 from lightrag_wrapper.exceptions import LightRAGAdapterError
-from lightrag_wrapper.log import get_logger
 from lightrag_wrapper.llm import LLMService
+from lightrag_wrapper.log import get_logger
 from lightrag_wrapper.models import (
     DocumentIngestStatus,
     IngestResult,
@@ -26,6 +26,7 @@ from lightrag_wrapper.models import (
     QueryResult,
     Reference,
 )
+from lightrag_wrapper.tracing import without_langfuse
 
 logger = get_logger(__name__)
 
@@ -128,10 +129,11 @@ class EmbeddedLightRAGAdapter(LightRAGAdapter):
 
         file_paths = normalize_sources(len(documents), list(sources) if sources else None)
         try:
-            try:
-                await rag.ainsert(list(documents), file_paths=file_paths)
-            except TypeError:
-                await rag.ainsert(list(documents))
+            with without_langfuse():
+                try:
+                    await rag.ainsert(list(documents), file_paths=file_paths)
+                except TypeError:
+                    await rag.ainsert(list(documents))
         except Exception as exc:
             raise LightRAGAdapterError(f"Embedded ingest failed: {exc}") from exc
 

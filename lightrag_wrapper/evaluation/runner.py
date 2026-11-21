@@ -59,6 +59,7 @@ class QuestionComparison:
     judgment: CombinedJudgment | None
     judge_usages: list[TokenUsage]
     error: str | None = None
+    repeat: int = 1
 
 
 class RetrievalCounter:
@@ -100,6 +101,16 @@ def isolated_config(
     return base.model_copy(update=update)
 
 
+async def ingest_questions(questions: list[EvalQuestion], *, config: LightRAGConfig) -> int:
+    """Ingest every unique passage for these questions and return how many were sent."""
+    adapter = create_adapter(config)
+    try:
+        await adapter.initialize()
+        return await _ingest_questions(adapter, questions)
+    finally:
+        await adapter.aclose()
+
+
 async def compare_questions(
     questions: list[EvalQuestion],
     *,
@@ -107,8 +118,11 @@ async def compare_questions(
     judge_model: str,
     native_mode: QueryMode = QueryMode.MIX,
     concurrency: int = 2,
+    repeats: int = 1,
 ) -> list[QuestionComparison]:
-    """Ingest the sampled passages once, then compare each question."""
+    """Ingest the sampled passages once, then compare each question ``repeats`` times."""
+    if repeats < 1:
+        raise ValueError("repeats must be at least 1.")
     adapter = RetrievalCounter(create_adapter(config))
     llm = LLMService(config)
     plan_cache = await open_plan_cache(config)
@@ -125,9 +139,9 @@ async def compare_questions(
         executor = PlanExecutor(llm, adapter, router)
         semaphore = asyncio.Semaphore(max(1, concurrency))
 
-        async def _one(question: EvalQuestion) -> QuestionComparison:
+        async def _one(question: EvalQuestion, repeat_index: int) -> QuestionComparison:
             async with semaphore:
-                return await compare_question(
+                comparison = await compare_question(
                     question,
                     native=lambda item: run_native(adapter, item, native_mode),
                     agentic=lambda item: run_agentic(
@@ -144,8 +158,14 @@ async def compare_questions(
                         model=judge_model,
                     ),
                 )
+                comparison.repeat = repeat_index
+                return comparison
 
-        return list(await asyncio.gather(*[_one(question) for question in questions]))
+        results: list[QuestionComparison] = []
+        for repeat_index in range(1, repeats + 1):
+            batch = await asyncio.gather(*[_one(question, repeat_index) for question in questions])
+            results.extend(batch)
+        return results
     finally:
         await adapter.aclose()
         await plan_cache.aclose()
@@ -227,26 +247,35 @@ async def run_agentic(
             raw["evaluation_calls"] = _component_calls(timing)
             raw["evaluation_references"] = [item.model_dump() if hasattr(item, "model_dump") else item for item in references]
             return result.model_copy(update={"raw": raw})
-        captured_plan["plan"] = [node.model_dump(by_alias=True) for node in plan.nodes]
+        original_subqueries = {node.id: node.subquery for node in plan.nodes}
         parts: list[str] = []
         references: list[Any] = []
-        async for event in executor.stream(
-            plan.nodes,
-            user_query=question.question,
-            timing=timing,
-        ):
-            if event.get("response"):
-                parts.append(str(event["response"]))
-            references.extend(event.get("references") or [])
-        return QueryResult(
-            response="\n\n".join(parts),
-            mode=QueryMode.MIX,
-            references=[],
-            raw={
-                "evaluation_references": references,
-                "evaluation_calls": _component_calls(timing),
-            },
-        )
+        try:
+            async for event in executor.stream(
+                plan.nodes,
+                user_query=question.question,
+                timing=timing,
+            ):
+                if event.get("response"):
+                    parts.append(str(event["response"]))
+                references.extend(event.get("references") or [])
+            return QueryResult(
+                response="\n\n".join(parts),
+                mode=QueryMode.MIX,
+                references=[],
+                raw={
+                    "evaluation_references": references,
+                    "evaluation_calls": _component_calls(timing),
+                },
+            )
+        finally:
+            # Stream replaces dependent subqueries in place. Save both wordings.
+            dumped: list[dict[str, Any]] = []
+            for node in plan.nodes:
+                row = node.model_dump(by_alias=True)
+                row["original_subquery"] = original_subqueries[node.id]
+                dumped.append(row)
+            captured_plan["plan"] = dumped
 
     run = await _measured("agentic", _answer)
     run.plan = captured_plan["plan"]
@@ -380,6 +409,7 @@ async def _ingest_questions(adapter: Any, questions: list[EvalQuestion]) -> None
             sources.append(title)
     if texts:
         await adapter.ingest_texts(texts, sources=sources, wait=True)
+    return len(texts)
 
 
 async def load_isolated_config(

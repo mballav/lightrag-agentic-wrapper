@@ -72,6 +72,7 @@ class DagCall:
     step: str
     call_seconds: float
     response_seconds: float | None
+    detail: str | None = None
 
 
 @dataclass
@@ -106,12 +107,14 @@ class QueryTiming:
         node_id: int | None = None,
         node_type: str | None = None,
         step: str | None = None,
+        detail: str | None = None,
     ) -> None:
         """Add one DAG LLM or retrieval call.
 
         ``call_seconds`` is the wall clock around the call.
         ``response_seconds`` is the ``response_time`` the call returned.
         ``node_id``, ``node_type``, and ``step`` name that call in the report.
+        ``detail`` is extra text for that step, such as a resolved search string.
         """
         with self._lock:
             self.dag_llm_call_s += call_seconds
@@ -127,6 +130,7 @@ class QueryTiming:
                         step=step,
                         call_seconds=call_seconds,
                         response_seconds=response_seconds,
+                        detail=detail,
                     )
                 )
 
@@ -214,6 +218,8 @@ def _dag_call_lines(calls: list[DagCall]) -> list[str]:
                 f"  {call.step}: LLM call time {_seconds(call.call_seconds)}, "
                 f"LLM response time {response}"
             )
+            if call.step == "resolve" and call.detail:
+                lines.append(f"    resolved query: {call.detail}")
     return lines
 
 

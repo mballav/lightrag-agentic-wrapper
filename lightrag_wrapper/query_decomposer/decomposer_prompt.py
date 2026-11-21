@@ -513,7 +513,7 @@ Node 2:
 Retrieve the stated revenue from Source B.
 
 Node 3:
-Evaluate whether the two reported figures agree and identify the reason for any discrepancy if supported by the evidence.
+Evaluate whether the two reported figures from Nodes 1 and 2 agree and identify the reason for any discrepancy if supported by the evidence.
 
 Node 3 depends on [1, 2].
 
@@ -846,7 +846,8 @@ Definitions:
 
 * "subquery":
   A concise, standalone description of the operation.
-  It must be precise enough that the downstream executor knows what information or transformation is required.
+  It must be precise enough that the downstream executor knows what information or transformation is required and it must refer to its dependencies in the "depends_on" list.
+  There is no metadata filter, date index, or SQL predicate. Dates, versions, document names, and exclusions have to be written into the subquery text.
 
 * "depends_on":
   IDs of nodes whose outputs are required before this node can execute.
@@ -863,29 +864,6 @@ The output must be valid JSON.
 Do not include any explanation, commentary, Markdown, or additional fields outside the defined node structure.
 
 ---
-
-RAG CONTEXT:
-{
-  "retrieval_backend": "LightRAG",
-  "stores": ["knowledge graph of extracted entities and relations", "vector index of text chunks"],
-  "query_modes_available_to_downstream_router": ["local", "global", "hybrid", "naive", "mix"],
-  "mode_selection": "A separate retrieval router chooses the mode for each retrieve node.",
-  "keyword_generation": "High-level and low-level keywords are generated downstream.",
-  "structured_filters": "none. There is no metadata filter, date index, or SQL predicate. Dates, versions, document names, and exclusions have to be written into the subquery text.",
-  "retrieval_guarantee": "Approximate top-k. A retrieve node is not an exhaustive scan of every document.",
-  "aggregation": "Retrieval does not compute sums, averages, counts, or percentages. Those require a later aggregate node over retrieved evidence.",
-  "provenance": "Retrieval returns text chunks plus file_path citations.",
-  "searchable_status": "processed",
-  "supported_source_types": ["txt", "md", "pdf", "docx", "uploaded text"],
-  "budgets": {
-    "top_k": 40,
-    "chunk_top_k": 20,
-    "max_entity_tokens": 6000,
-    "max_relation_tokens": 8000,
-    "max_total_tokens": 30000
-  }
-}
-
 KNOWLEDGE BASE / DOCUMENT METADATA:
 {knowledge_base_metadata}
 """

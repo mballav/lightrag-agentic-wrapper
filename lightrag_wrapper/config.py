@@ -177,7 +177,7 @@ class LightRAGConfig(BaseSettings):
     llm_binding_api_key: str | None = None
     llm_model_cheap: str = "gpt-6-luna"
     llm_model_mid_tier: str = "gpt-6.1-terra"
-    llm_model_high_end: str = "gpt-6.1-sol"
+    llm_model_high_end: str = "gpt-6.2-sol"
     llm_timeout: int = Field(default=240, ge=0)
     max_async_llm: int = Field(default=4, ge=1)
     azure_openai_api_version: str | None = None
@@ -186,7 +186,7 @@ class LightRAGConfig(BaseSettings):
     # LiteLLM exposes num_retries on completion/responses; other APIs are uneven.
     # LLMService applies a uniform tenacity policy (see llm/service.py).
     llm_num_retries: int = Field(
-        default=3,
+        default=5,
         ge=0,
         description="Attempts for each LiteLLM call (including the first).",
     )
@@ -257,6 +257,15 @@ class LightRAGConfig(BaseSettings):
     chunk_overlap_token_size: int = Field(default=100, ge=0)
     summary_language: str = "English"
     enable_llm_cache: bool = True
+
+    langfuse_tracing_enabled: bool = Field(
+        default=False,
+        description=(
+            "When LANGFUSE_TRACING_ENABLED is true, LiteLLM and LangGraph "
+            "send traces to Langfuse. The Compose app service and the "
+            "evaluation CLI both read this from the wrapper env file."
+        ),
+    )
 
     # --- Query defaults (also read by LightRAG QueryParam from env) ---
     enable_rerank: bool = Field(
